@@ -46,6 +46,9 @@ def filters():
     if args.get("lawd_cd"):
         where.append("lawd_cd = ?")
         params.append(args["lawd_cd"])
+    if args.get("year"):
+        where.append("deal_ymd BETWEEN ? AND ?")
+        params += [f"{args['year']}01", f"{args['year']}12"]
     if args.get("ymd"):
         where.append("deal_ymd = ?")
         params.append(args["ymd"].replace("-", ""))
@@ -55,6 +58,15 @@ def filters():
     if args.get("exclude_cancelled"):
         where.append("TRIM(COALESCE(cdealType,'')) = ''")
     return (" WHERE " + " AND ".join(where)) if where else "", params
+
+
+def count_trades(conn, where, params):
+    """지역·기간 조건만 있으면 jobs의 저장 건수 합으로 바로 계산하고, 검색어가 있을 때만 행을 센다."""
+    if request.args.get("q"):
+        return conn.execute(f"SELECT COUNT(*) FROM trades{where}", params).fetchone()[0]
+    jw = where.replace("TRIM(COALESCE(cdealType,'')) = ''", "1=1")
+    col = "stored_count - COALESCE(q_cancelled, 0)" if request.args.get("exclude_cancelled") else "stored_count"
+    return conn.execute(f"SELECT COALESCE(SUM({col}), 0) FROM jobs{jw}", params).fetchone()[0]
 
 
 def with_names(row):
@@ -68,18 +80,21 @@ def index():
     where, params = filters()
     page = max(int(request.args.get("page", 1) or 1), 1)
     with closing(c.connect()) as conn:
-        total = conn.execute(f"SELECT COUNT(*) FROM trades{where}", params).fetchone()[0]
+        total = count_trades(conn, where, params)
         rows = conn.execute(
             f"SELECT * FROM trades{where} ORDER BY dealDate DESC, rowid DESC LIMIT ? OFFSET ?",
             params + [PAGE_SIZE, (page - 1) * PAGE_SIZE],
         ).fetchall()
-        months = [r[0] for r in conn.execute("SELECT DISTINCT deal_ymd FROM jobs ORDER BY deal_ymd DESC")]
+        all_months = [r[0] for r in conn.execute("SELECT DISTINCT deal_ymd FROM jobs ORDER BY deal_ymd DESC")]
+    year = request.args.get("year", "")
+    months = [m for m in all_months if m.startswith(year)]
     sido = request.args.get("sido", "")
     sigungu = CODES[CODES["시도"] == sido] if sido else CODES
     return render_template(
         "index.html", rows=[with_names(r) for r in rows], total=total, page=page,
         pages=max((total - 1) // PAGE_SIZE + 1, 1), args=request.args, sido_list=SIDO,
         sigungu_list=sigungu.to_dict("records"), months=months, p=c.progress(),
+        years=sorted({m[:4] for m in all_months}, reverse=True),
     )
 
 
@@ -87,11 +102,16 @@ def index():
 def status():
     return render_template("status.html", p=c.progress(), q=c.quality_report(),
                            start_ymd=c.START_YMD, refresh_months=c.REFRESH_MONTHS, refresh_at=c.REFRESH_AT,
-                           recheck_days=c.RECHECK_DAYS, interval=c.REQUEST_INTERVAL)
+                           recheck_days=c.RECHECK_DAYS, old_recheck_days=c.OLD_RECHECK_DAYS, interval=c.REQUEST_INTERVAL)
 
 
 @app.route("/download.csv")
 def download():
+    args = request.args
+    if not any(args.get(k) for k in ("sido", "lawd_cd", "year", "ymd")):
+        # 전체(2006년~) 한 번에 내려받으면 수 GB가 되어 서버에 부담이 크다
+        return Response("시도·시군구·연도·계약월 중 하나 이상을 선택한 뒤 내려받으세요.",
+                        status=400, mimetype="text/plain; charset=utf-8")
     where, params = filters()
 
     def generate():

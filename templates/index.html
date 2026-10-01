@@ -9,6 +9,10 @@
     <option value="">전체 시군구</option>
     {% for s in sigungu_list %}<option value="{{ s.LAWD_CD }}" {{ 'selected' if args.lawd_cd == s.LAWD_CD }}>{{ s.시군구 }}</option>{% endfor %}
   </select>
+  <select name="year" onchange="this.form.ymd.value='';this.form.submit()">
+    <option value="">전체 연도</option>
+    {% for y in years %}<option {{ 'selected' if args.year == y }}>{{ y }}</option>{% endfor %}
+  </select>
   <select name="ymd">
     <option value="">전체 계약월</option>
     {% for m in months %}<option value="{{ m }}" {{ 'selected' if args.ymd == m }}>{{ m[:4] }}-{{ m[4:] }}</option>{% endfor %}
@@ -16,7 +20,9 @@
   <input type="text" name="q" value="{{ args.q or '' }}" placeholder="단지명·법정동·도로명">
   <label class="muted"><input type="checkbox" name="exclude_cancelled" value="1" {{ 'checked' if args.exclude_cancelled }}> 해제 거래 제외</label>
   <button class="primary">조회</button>
+  {% if args.sido or args.lawd_cd or args.year or args.ymd %}
   <a class="btn" href="/download.csv?{{ request.query_string.decode() }}">CSV 다운로드</a>
+  {% else %}<span class="muted">CSV는 지역·연도·계약월 중 하나를 고르면 받을 수 있습니다</span>{% endif %}
 </form>
 
 <div class="meta">조건에 맞는 거래 {{ total|comma }}건 · 계약일 최신순</div>

@@ -4,6 +4,7 @@
 오래된 계약월부터 순서대로 받고, 하루 호출 한도를 넘지 않게 천천히 호출한다.
 결과는 SQLite(DATA_DIR/trades.db)에 job 단위로 통째로 교체 저장한다.
 """
+import json
 import logging
 import os
 import sqlite3
@@ -35,12 +36,15 @@ DATA_DIR = Path(os.environ.get("DATA_DIR", BASE_DIR / "data"))
 DB_PATH = DATA_DIR / "trades.db"
 CODES_PATH = BASE_DIR / "lawd_codes.csv"
 
-START_YMD = os.environ.get("START_YMD", "202601")              # 수집 시작 계약월
+START_YMD = os.environ.get("START_YMD", "200601")              # 수집 시작 계약월(공개 시작 2006-01)
 DAILY_LIMIT = int(os.environ.get("DAILY_LIMIT", "8000"))       # 하루 호출 상한(개발계정 한도보다 낮게)
 REQUEST_INTERVAL = float(os.environ.get("REQUEST_INTERVAL", "1.5"))  # 호출 간격(초)
 REFRESH_MONTHS = int(os.environ.get("REFRESH_MONTHS", "3"))    # 매일 다시 받을 최근 개월 수(신고기한 30일, 해제 반영)
 REFRESH_AT = os.environ.get("REFRESH_AT", "06:00")             # 최근 N개월을 매일 다시 받는 시각(KST)
-RECHECK_DAYS = int(os.environ.get("RECHECK_DAYS", "7"))        # 지난 달 건수 재확인 주기
+RECHECK_DAYS = int(os.environ.get("RECHECK_DAYS", "7"))        # 최근 1년(재수집 구간 이전) 건수 재확인 주기
+RECHECK_MONTHS = int(os.environ.get("RECHECK_MONTHS", "12"))   # 주기 재확인할 지난 개월 수
+OLD_RECHECK_DAYS = int(os.environ.get("OLD_RECHECK_DAYS", "180"))  # 그보다 오래된 달의 재확인 주기
+STORAGE_STOP_PCT = float(os.environ.get("STORAGE_STOP_PCT", "90"))  # 볼륨 사용률이 이 이상이면 과거 자료 수집 중단
 NUM_ROWS = 1000
 VOLUME_LIMIT_MB = int(os.environ.get("VOLUME_LIMIT_MB", "500"))  # Railway 볼륨 용량(사용률 표시용)
 
@@ -54,9 +58,13 @@ FIELDS = [
 ]
 # 누락 점검 대상: 위치(지오코딩)·가격 분석에 꼭 필요한 필드
 KEY_FIELDS = ["aptNm", "umdNm", "jibun", "roadNm", "excluUseAr", "floor", "buildYear", "aptSeq"]
+BLANK_FIELDS = KEY_FIELDS + ["dealAmount", "dealDate"]
+QUALITY_COLS = ["q_blank", "q_dup", "q_ymd_bad", "q_sgg_bad", "q_cancelled"]
 
 _lock = threading.Lock()
-state = {"running": False, "current": None, "last_error": None, "paused_until": None}
+state = {"running": False, "current": None, "last_error": None, "paused_until": None,
+         "backfill_stopped": None}
+_ensured = {"month": None}
 
 
 class QuotaExceeded(Exception):
@@ -108,7 +116,8 @@ def init_db():
             {cols}, dealAmount INTEGER, excluUseAr REAL,
             dealDate TEXT, collected_at TEXT
         );
-        CREATE INDEX IF NOT EXISTS ix_trades_job ON trades(lawd_cd, deal_ymd);
+        DROP INDEX IF EXISTS ix_trades_job;
+        CREATE INDEX IF NOT EXISTS ix_trades_ymd ON trades(deal_ymd, lawd_cd);
         CREATE INDEX IF NOT EXISTS ix_trades_date ON trades(dealDate);
         CREATE TABLE IF NOT EXISTS jobs (
             lawd_cd TEXT NOT NULL, deal_ymd TEXT NOT NULL,
@@ -118,11 +127,17 @@ def init_db():
             next_try_at TEXT, error TEXT,
             PRIMARY KEY (lawd_cd, deal_ymd)
         );
+        CREATE INDEX IF NOT EXISTS ix_jobs_status ON jobs(status, deal_ymd);
         CREATE TABLE IF NOT EXISTS api_usage (day TEXT PRIMARY KEY, calls INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS changes (       -- 재수집 시 건수 변동 기록(늦은 신고·해제 추적)
             at TEXT, lawd_cd TEXT, deal_ymd TEXT, before INTEGER, after INTEGER
         );
         """)
+        # 누락 점검을 작업 단위로 미리 집계해 둔다(화면을 열 때 전체 행을 훑지 않도록)
+        have = {r["name"] for r in conn.execute("PRAGMA table_info(jobs)")}
+        for col in QUALITY_COLS:
+            if col not in have:
+                conn.execute(f"ALTER TABLE jobs ADD COLUMN {col} {'TEXT' if col == 'q_blank' else 'INTEGER'}")
 
 
 def load_codes():
@@ -140,13 +155,17 @@ def month_range(start_ymd, end_ymd):
 
 def ensure_jobs():
     """시작월~이번 달 x 전 시군구 job이 없으면 만든다(달이 바뀌면 자동 추가)."""
-    months = month_range(START_YMD, now_kst().strftime("%Y%m"))
+    this_month = now_kst().strftime("%Y%m")
+    if _ensured["month"] == this_month:
+        return
+    months = month_range(START_YMD, this_month)
     codes = load_codes()["LAWD_CD"].tolist()
     with closing(connect()) as conn, conn:
         conn.executemany(
             "INSERT OR IGNORE INTO jobs(lawd_cd, deal_ymd) VALUES (?, ?)",
             [(c, ym) for ym in months for c in codes],
         )
+    _ensured["month"] = this_month
 
 
 # ---------------------------------------------------------------- 호출 한도
@@ -242,6 +261,38 @@ def to_rows(items, lawd_cd, deal_ymd, collected_at):
     return rows
 
 
+def job_quality(rows, lawd_cd, deal_ymd):
+    """작업 하나의 누락 점검 집계: 필드별 빈 값, 완전 중복, 계약월·코드 불일치, 해제 건수."""
+    blank = {f: sum(1 for r in rows if r.get(f) is None or str(r.get(f)).strip() == "")
+             for f in BLANK_FIELDS}
+    keys = [tuple(r.get(f) for f in FIELDS) for r in rows]
+    return dict(
+        q_blank=json.dumps({f: n for f, n in blank.items() if n}),
+        q_dup=len(keys) - len(set(keys)),
+        q_ymd_bad=sum(1 for r in rows if not r.get("dealDate")
+                      or r["dealDate"][:7].replace("-", "") != deal_ymd),
+        q_sgg_bad=sum(1 for r in rows if (r.get("sggCd") or "") != lawd_cd),
+        q_cancelled=sum(1 for r in rows if (r.get("cdealType") or "").strip()),
+    )
+
+
+def backfill_quality():
+    """품질 집계 열이 비어 있는 기존 작업을 한 번 채운다(이전 버전에서 받은 자료)."""
+    with closing(connect()) as conn:
+        todo = conn.execute(
+            "SELECT lawd_cd, deal_ymd FROM jobs WHERE status='done' AND q_blank IS NULL").fetchall()
+        for job in todo:
+            rows = [dict(r) for r in conn.execute(
+                "SELECT * FROM trades WHERE deal_ymd=? AND lawd_cd=?", (job["deal_ymd"], job["lawd_cd"]))]
+            q = job_quality(rows, job["lawd_cd"], job["deal_ymd"])
+            conn.execute(f"UPDATE jobs SET {', '.join(f'{k}=:{k}' for k in q)} "
+                         "WHERE lawd_cd=:lawd_cd AND deal_ymd=:deal_ymd",
+                         {**q, "lawd_cd": job["lawd_cd"], "deal_ymd": job["deal_ymd"]})
+        conn.commit()
+    if todo:
+        log.info("기존 작업 %d개의 품질 집계를 채움", len(todo))
+
+
 def save_job(conn, lawd_cd, deal_ymd, items, total):
     stored_at = now_str()
     rows = to_rows(items, lawd_cd, deal_ymd, stored_at)
@@ -250,8 +301,9 @@ def save_job(conn, lawd_cd, deal_ymd, items, total):
     ).fetchone()
     cols = ["lawd_cd", "deal_ymd", *FIELDS, "dealDate", "collected_at"]
     col_sql = ", ".join(f'"{c}"' for c in cols)
+    q = job_quality(rows, lawd_cd, deal_ymd)
     with conn:
-        conn.execute("DELETE FROM trades WHERE lawd_cd=? AND deal_ymd=?", (lawd_cd, deal_ymd))
+        conn.execute("DELETE FROM trades WHERE deal_ymd=? AND lawd_cd=?", (deal_ymd, lawd_cd))
         conn.executemany(
             f"INSERT INTO trades({col_sql}) VALUES ({', '.join('?' * len(cols))})",
             [[r[c] for c in cols] for r in rows],
@@ -266,6 +318,9 @@ def save_job(conn, lawd_cd, deal_ymd, items, total):
              None if status == "done" else (now_kst() + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S"),
              lawd_cd, deal_ymd),
         )
+        conn.execute(f"UPDATE jobs SET {', '.join(f'{k}=:{k}' for k in q)} "
+                     "WHERE lawd_cd=:lawd_cd AND deal_ymd=:deal_ymd",
+                     {**q, "lawd_cd": lawd_cd, "deal_ymd": deal_ymd})
         if prev and prev["stored_count"] is not None and prev["stored_count"] != len(rows):
             conn.execute("INSERT INTO changes VALUES (?, ?, ?, ?, ?)",
                          (stored_at, lawd_cd, deal_ymd, prev["stored_count"], len(rows)))
@@ -288,42 +343,68 @@ def mark_error(conn, lawd_cd, deal_ymd, msg):
 
 # ---------------------------------------------------------------- 무엇을 받을지
 
-def last_refresh_time():
-    """가장 최근에 지난 매일 갱신 시각(REFRESH_AT, KST). 이 시각 전에 받은 최근 달은 다시 받는다."""
+def daily_start(day_offset=0):
+    """그날의 수집 시작 시각(REFRESH_AT, KST)."""
     hour, minute = map(int, REFRESH_AT.split(":"))
-    now = now_kst()
-    at = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-    return at if now >= at else at - timedelta(days=1)
+    at = now_kst().replace(hour=hour, minute=minute, second=0, microsecond=0)
+    return at + timedelta(days=day_offset)
 
 
-def next_jobs(conn, limit):
-    """우선순위: ①미수집(오래된 달부터) ②오류·불일치 재시도 ③최근 N개월 재수집 ④지난 달 건수 재확인."""
-    now = now_str()
-    y, m = now_kst().year, now_kst().month - (REFRESH_MONTHS - 1)
+def last_refresh_time():
+    """가장 최근에 지난 매일 갱신 시각. 이 시각 전에 받은 최근 달은 다시 받는다."""
+    at = daily_start()
+    return at if now_kst() >= at else at - timedelta(days=1)
+
+
+def months_ago(n):
+    y, m = now_kst().year, now_kst().month - n
     while m < 1:
         y, m = y - 1, m + 12
-    recent_from = f"{y}{m:02d}"
-    refresh_before = last_refresh_time().strftime("%Y-%m-%d %H:%M:%S")
-    recheck_before = (now_kst() - timedelta(days=RECHECK_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
+    return f"{y}{m:02d}"
+
+
+def next_jobs(conn, limit, allow_backfill=True):
+    """우선순위
+    ① 최근 N개월 미수집(새 달 포함)  ② 최근 N개월 매일 재수집  ③ 오류·불일치 재시도
+    ④ 과거 자료 미수집(오래된 달부터, 용량 여유가 있을 때만)
+    ⑤ 지난 1년 건수 재확인(RECHECK_DAYS 주기)  ⑥ 그보다 오래된 달 건수 재확인(OLD_RECHECK_DAYS 주기)
+    """
+    fmt = "%Y-%m-%d %H:%M:%S"
+    params = dict(
+        now=now_str(),
+        recent=months_ago(REFRESH_MONTHS - 1),
+        check_from=months_ago(REFRESH_MONTHS - 1 + RECHECK_MONTHS),
+        refresh=last_refresh_time().strftime(fmt),
+        recheck=(now_kst() - timedelta(days=RECHECK_DAYS)).strftime(fmt),
+        old_recheck=(now_kst() - timedelta(days=OLD_RECHECK_DAYS)).strftime(fmt),
+        backfill=1 if allow_backfill else 0,
+        limit=limit,
+    )
     sql = """
-    SELECT lawd_cd, deal_ymd, 'fetch' AS mode, 1 AS pri FROM jobs WHERE status='pending'
+    SELECT lawd_cd, deal_ymd, 'fetch' AS mode, 1 AS pri FROM jobs
+     WHERE status='pending' AND deal_ymd >= :recent
     UNION ALL
     SELECT lawd_cd, deal_ymd, 'fetch', 2 FROM jobs
-     WHERE status IN ('error','incomplete') AND (next_try_at IS NULL OR next_try_at <= :now)
-    UNION ALL
-    SELECT lawd_cd, deal_ymd, 'fetch', 3 FROM jobs
      WHERE status='done' AND deal_ymd >= :recent AND fetched_at < :refresh
     UNION ALL
-    SELECT lawd_cd, deal_ymd, 'check', 4 FROM jobs
-     WHERE status='done' AND deal_ymd < :recent AND checked_at <= :recheck
+    SELECT lawd_cd, deal_ymd, 'fetch', 3 FROM jobs
+     WHERE status IN ('error','incomplete') AND (next_try_at IS NULL OR next_try_at <= :now)
+    UNION ALL
+    SELECT lawd_cd, deal_ymd, 'fetch', 4 FROM jobs
+     WHERE status='pending' AND deal_ymd < :recent AND :backfill = 1
+    UNION ALL
+    SELECT lawd_cd, deal_ymd, 'check', 5 FROM jobs
+     WHERE status='done' AND deal_ymd < :recent AND deal_ymd >= :check_from AND checked_at <= :recheck
+    UNION ALL
+    SELECT lawd_cd, deal_ymd, 'check', 6 FROM jobs
+     WHERE status='done' AND deal_ymd < :check_from AND checked_at <= :old_recheck
     ORDER BY pri, deal_ymd, lawd_cd LIMIT :limit
     """
-    return conn.execute(sql, dict(now=now, recent=recent_from, refresh=refresh_before,
-                                  recheck=recheck_before, limit=limit)).fetchall()
+    return conn.execute(sql, params).fetchall()
 
 
 def check_job(session, key, conn, lawd_cd, deal_ymd):
-    """누락 점검 2: 지난 달은 1건만 요청해 전체 건수만 비교, 달라졌으면 다시 받도록 표시."""
+    """누락 점검: 지난 달은 1건만 요청해 전체 건수만 비교, 달라졌으면 다시 받도록 표시."""
     _, total = fetch_page(session, key, conn, lawd_cd, deal_ymd, 1, num_rows=1)
     row = conn.execute("SELECT stored_count FROM jobs WHERE lawd_cd=? AND deal_ymd=?",
                        (lawd_cd, deal_ymd)).fetchone()
@@ -336,8 +417,13 @@ def check_job(session, key, conn, lawd_cd, deal_ymd):
                          (now_str(), lawd_cd, deal_ymd))
 
 
+def storage_pct():
+    total = sum(p.stat().st_size for p in DATA_DIR.glob("trades.db*") if p.is_file())
+    return 100 * total / (VOLUME_LIMIT_MB * 1024 * 1024)
+
+
 def run_batch(max_jobs=20):
-    """스케줄러가 주기적으로 호출. 한 번에 max_jobs개 job만 처리하고 빠진다."""
+    """스케줄러가 1분마다 호출. 매일 REFRESH_AT부터 하루 한도까지 수집하고, 0시~REFRESH_AT에는 쉰다."""
     if not _lock.acquire(blocking=False):
         return
     state["running"] = True
@@ -345,10 +431,21 @@ def run_batch(max_jobs=20):
         if state["paused_until"] and now_str() < state["paused_until"]:
             return
         state["paused_until"] = None
+        if now_kst() < daily_start():
+            return  # 오늘 수집 시작 전
         key = load_service_key()
         ensure_jobs()
+        if not _ensured.get("quality"):
+            backfill_quality()
+            _ensured["quality"] = True
+
+        pct = storage_pct()
+        allow_backfill = pct < STORAGE_STOP_PCT
+        state["backfill_stopped"] = None if allow_backfill else (
+            f"볼륨 사용률 {pct:.1f}% ≥ {STORAGE_STOP_PCT:g}% → 과거 자료 수집 중단(최근 자료는 계속)")
+
         with closing(connect()) as conn, requests.Session() as session:
-            for job in next_jobs(conn, max_jobs):
+            for job in next_jobs(conn, max_jobs, allow_backfill):
                 if quota_left(conn) <= 0:
                     raise QuotaExceeded("오늘 호출 상한 도달")
                 lawd_cd, deal_ymd, mode = job["lawd_cd"], job["deal_ymd"], job["mode"]
@@ -365,10 +462,10 @@ def run_batch(max_jobs=20):
                     mark_error(conn, lawd_cd, deal_ymd, str(e))
                     state["last_error"] = f"{now_str()} {deal_ymd} {lawd_cd}: {e}"
     except QuotaExceeded as e:
-        # 다음 날 0시(KST)까지 쉰다
-        tomorrow = (now_kst() + timedelta(days=1)).strftime("%Y-%m-%d 00:00:00")
-        state["paused_until"] = tomorrow
-        log.info("%s → %s까지 대기", e, tomorrow)
+        # 다음 날 수집 시작 시각까지 쉰다
+        resume = daily_start(1).strftime("%Y-%m-%d %H:%M:%S")
+        state["paused_until"] = resume
+        log.info("%s → %s까지 대기", e, resume)
     except Exception as e:  # noqa: BLE001
         state["last_error"] = f"{now_str()} {type(e).__name__}: {e}"
         log.exception("수집 배치 실패")
@@ -381,22 +478,34 @@ def run_batch(max_jobs=20):
 # ---------------------------------------------------------------- 진행 상황·누락 점검 보고
 
 def progress():
+    """진행 상황. 거래 건수는 jobs의 저장 건수 합으로 계산한다(대용량에서 COUNT(*) 피함)."""
     with closing(connect()) as conn:
         by_status = {r["status"]: r["n"] for r in conn.execute(
             "SELECT status, COUNT(*) n FROM jobs GROUP BY status")}
-        by_month = conn.execute("""
+        by_month = [dict(r) for r in conn.execute("""
             SELECT deal_ymd, COUNT(*) jobs, SUM(status='done') done,
                    SUM(status IN ('error','incomplete')) bad, SUM(COALESCE(stored_count,0)) trades,
                    MAX(fetched_at) last_fetched
-              FROM jobs GROUP BY deal_ymd ORDER BY deal_ymd""").fetchall()
-        trades = conn.execute("SELECT COUNT(*) FROM trades").fetchone()[0]
+              FROM jobs GROUP BY deal_ymd ORDER BY deal_ymd""")]
         last = conn.execute("SELECT MAX(fetched_at) FROM jobs").fetchone()[0]
         used = calls_today(conn)
         page_size = conn.execute("PRAGMA page_size").fetchone()[0]
         free_bytes = conn.execute("PRAGMA freelist_count").fetchone()[0] * page_size
-    return dict(by_status=by_status, by_month=[dict(r) for r in by_month], trades=trades,
-                last_fetched=last, calls_today=used, daily_limit=DAILY_LIMIT,
-                total_jobs=sum(by_status.values()), storage=storage(trades, free_bytes), **state)
+    by_year = {}
+    for m in by_month:
+        y = by_year.setdefault(m["deal_ymd"][:4], dict(year=m["deal_ymd"][:4], jobs=0, done=0, bad=0,
+                                                         trades=0, last_fetched=None))
+        for k in ("jobs", "done", "bad", "trades"):
+            y[k] += m[k] or 0
+        y["last_fetched"] = max(filter(None, [y["last_fetched"], m["last_fetched"]]), default=None)
+    trades = sum(m["trades"] for m in by_month)
+    total_jobs = sum(by_status.values())
+    pending = by_status.get("pending", 0)
+    per_day = max(DAILY_LIMIT - REFRESH_MONTHS * len(load_codes()), 1)
+    return dict(by_status=by_status, by_month=by_month, by_year=list(by_year.values()), trades=trades,
+                last_fetched=last, calls_today=used, daily_limit=DAILY_LIMIT, total_jobs=total_jobs,
+                eta_days=-(-pending // per_day) if pending else 0, refresh_at=REFRESH_AT,
+                storage=storage(trades, free_bytes), **state)
 
 
 def storage(trades, free_bytes):
@@ -406,18 +515,18 @@ def storage(trades, free_bytes):
     db = files.get("trades.db", 0)
     return dict(db_bytes=db, wal_bytes=files.get("trades.db-wal", 0), total_bytes=total,
                 free_bytes=free_bytes, bytes_per_trade=round(db / trades) if trades else None,
-                limit_bytes=VOLUME_LIMIT_MB * 1024 * 1024,
+                limit_bytes=VOLUME_LIMIT_MB * 1024 * 1024, stop_pct=STORAGE_STOP_PCT,
                 pct=round(100 * total / (VOLUME_LIMIT_MB * 1024 * 1024), 1))
 
 
 def quality_report():
-    """누락 점검 결과 모음."""
+    """누락 점검 결과 모음. 모두 jobs의 작업별 집계에서 계산한다."""
     codes = load_codes().set_index("LAWD_CD")
     with closing(connect()) as conn:
         # 1) 아직 못 받았거나 건수가 안 맞는 job
         problems = [dict(r) for r in conn.execute("""
             SELECT deal_ymd, lawd_cd, status, total_count, stored_count, attempts, error, next_try_at
-              FROM jobs WHERE status IN ('error','incomplete') ORDER BY deal_ymd, lawd_cd""")]
+              FROM jobs WHERE status IN ('error','incomplete') ORDER BY deal_ymd, lawd_cd LIMIT 500""")]
 
         # 2) 받은 달이 모두 0건인 시군구 → 코드 변경(행정구역 개편) 의심
         zero_codes = [dict(r) for r in conn.execute("""
@@ -425,39 +534,32 @@ def quality_report():
              WHERE status='done' GROUP BY lawd_cd
             HAVING SUM(stored_count) = 0 AND COUNT(*) >= 2""")]
 
-        # 3) 응답의 sggCd가 요청 코드와 다른 경우(코드 체계 변화 감지)
+        # 3) 응답의 sggCd가 요청 코드와 다른 작업(코드 체계 변화 감지)
         sgg_mismatch = [dict(r) for r in conn.execute("""
-            SELECT lawd_cd, sggCd, COUNT(*) n FROM trades
-             WHERE sggCd != lawd_cd GROUP BY lawd_cd, sggCd""")]
+            SELECT lawd_cd, deal_ymd, q_sgg_bad n FROM jobs WHERE q_sgg_bad > 0
+             ORDER BY deal_ymd, lawd_cd LIMIT 500""")]
 
-        # 4) 필드별 빈 값 비율(지오코딩·분석용 핵심 필드)
-        total = conn.execute("SELECT COUNT(*) FROM trades").fetchone()[0]
-        blanks = []
-        for f in KEY_FIELDS + ["dealAmount", "dealDate"]:
-            n = conn.execute(f'SELECT COUNT(*) FROM trades WHERE "{f}" IS NULL OR TRIM("{f}")=\'\'').fetchone()[0]
-            blanks.append(dict(field=f, missing=n, pct=round(100 * n / total, 2) if total else 0))
+        agg = conn.execute("""
+            SELECT COALESCE(SUM(stored_count),0) total, COALESCE(SUM(q_ymd_bad),0) ymd_bad,
+                   COALESCE(SUM(q_dup),0) dup, COALESCE(SUM(q_cancelled),0) cancelled
+              FROM jobs WHERE status='done'""").fetchone()
 
-        # 5) 계약월과 dealDate가 어긋나는 행
-        ymd_mismatch = conn.execute(
-            "SELECT COUNT(*) FROM trades WHERE dealDate IS NULL OR "
-            "REPLACE(SUBSTR(dealDate,1,7),'-','') != deal_ymd").fetchone()[0]
+        # 4) 필드별 빈 값 합계
+        blank_sum = dict.fromkeys(BLANK_FIELDS, 0)
+        for (q,) in conn.execute("SELECT q_blank FROM jobs WHERE q_blank IS NOT NULL AND q_blank != '{}'"):
+            for f, n in json.loads(q).items():
+                blank_sum[f] = blank_sum.get(f, 0) + n
 
-        # 6) 완전히 같은 행(중복 의심) — 같은 날 같은 동·층·가격 거래는 실제로도 있을 수 있음
-        dup = conn.execute(f"""
-            SELECT COALESCE(SUM(c - 1), 0) FROM (
-              SELECT COUNT(*) c FROM trades
-               GROUP BY {', '.join(f'"{f}"' for f in FIELDS)} HAVING c > 1)""").fetchone()[0]
-
-        # 7) 해제(취소)된 거래 수
-        cancelled = conn.execute("SELECT COUNT(*) FROM trades WHERE TRIM(cdealType) != ''").fetchone()[0]
-
-        # 8) 재수집 시 건수 변동 이력(최근 50건)
+        # 5) 재수집 시 건수 변동 이력(최근 50건)
         changes = [dict(r) for r in conn.execute(
             "SELECT * FROM changes ORDER BY at DESC LIMIT 50")]
 
+    total = agg["total"]
+    blanks = [dict(field=f, missing=n, pct=round(100 * n / total, 2) if total else 0)
+              for f, n in blank_sum.items()]
     name = lambda c: f"{codes.loc[c, '시도']} {codes.loc[c, '시군구']}" if c in codes.index else "?"  # noqa: E731
     for r in problems + zero_codes + sgg_mismatch + changes:
         r["name"] = name(r["lawd_cd"])
     return dict(total=total, problems=problems, zero_codes=zero_codes, sgg_mismatch=sgg_mismatch,
-                blanks=blanks, ymd_mismatch=ymd_mismatch, duplicates=dup, cancelled=cancelled,
-                changes=changes)
+                blanks=blanks, ymd_mismatch=agg["ymd_bad"], duplicates=agg["dup"],
+                cancelled=agg["cancelled"], changes=changes)
