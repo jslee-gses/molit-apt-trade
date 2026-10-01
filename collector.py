@@ -39,7 +39,7 @@ START_YMD = os.environ.get("START_YMD", "202601")              # 수집 시작 �
 DAILY_LIMIT = int(os.environ.get("DAILY_LIMIT", "8000"))       # 하루 호출 상한(개발계정 한도보다 낮게)
 REQUEST_INTERVAL = float(os.environ.get("REQUEST_INTERVAL", "1.5"))  # 호출 간격(초)
 REFRESH_MONTHS = int(os.environ.get("REFRESH_MONTHS", "3"))    # 매일 다시 받을 최근 개월 수(신고기한 30일, 해제 반영)
-REFRESH_HOURS = int(os.environ.get("REFRESH_HOURS", "24"))
+REFRESH_AT = os.environ.get("REFRESH_AT", "06:00")             # 최근 N개월을 매일 다시 받는 시각(KST)
 RECHECK_DAYS = int(os.environ.get("RECHECK_DAYS", "7"))        # 지난 달 건수 재확인 주기
 NUM_ROWS = 1000
 VOLUME_LIMIT_MB = int(os.environ.get("VOLUME_LIMIT_MB", "500"))  # Railway 볼륨 용량(사용률 표시용)
@@ -288,6 +288,14 @@ def mark_error(conn, lawd_cd, deal_ymd, msg):
 
 # ---------------------------------------------------------------- 무엇을 받을지
 
+def last_refresh_time():
+    """가장 최근에 지난 매일 갱신 시각(REFRESH_AT, KST). 이 시각 전에 받은 최근 달은 다시 받는다."""
+    hour, minute = map(int, REFRESH_AT.split(":"))
+    now = now_kst()
+    at = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    return at if now >= at else at - timedelta(days=1)
+
+
 def next_jobs(conn, limit):
     """우선순위: ①미수집(오래된 달부터) ②오류·불일치 재시도 ③최근 N개월 재수집 ④지난 달 건수 재확인."""
     now = now_str()
@@ -295,7 +303,7 @@ def next_jobs(conn, limit):
     while m < 1:
         y, m = y - 1, m + 12
     recent_from = f"{y}{m:02d}"
-    refresh_before = (now_kst() - timedelta(hours=REFRESH_HOURS)).strftime("%Y-%m-%d %H:%M:%S")
+    refresh_before = last_refresh_time().strftime("%Y-%m-%d %H:%M:%S")
     recheck_before = (now_kst() - timedelta(days=RECHECK_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
     sql = """
     SELECT lawd_cd, deal_ymd, 'fetch' AS mode, 1 AS pri FROM jobs WHERE status='pending'
@@ -304,7 +312,7 @@ def next_jobs(conn, limit):
      WHERE status IN ('error','incomplete') AND (next_try_at IS NULL OR next_try_at <= :now)
     UNION ALL
     SELECT lawd_cd, deal_ymd, 'fetch', 3 FROM jobs
-     WHERE status='done' AND deal_ymd >= :recent AND fetched_at <= :refresh
+     WHERE status='done' AND deal_ymd >= :recent AND fetched_at < :refresh
     UNION ALL
     SELECT lawd_cd, deal_ymd, 'check', 4 FROM jobs
      WHERE status='done' AND deal_ymd < :recent AND checked_at <= :recheck

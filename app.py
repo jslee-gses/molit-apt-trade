@@ -86,7 +86,7 @@ def index():
 @app.route("/status")
 def status():
     return render_template("status.html", p=c.progress(), q=c.quality_report(),
-                           start_ymd=c.START_YMD, refresh_months=c.REFRESH_MONTHS,
+                           start_ymd=c.START_YMD, refresh_months=c.REFRESH_MONTHS, refresh_at=c.REFRESH_AT,
                            recheck_days=c.RECHECK_DAYS, interval=c.REQUEST_INTERVAL)
 
 

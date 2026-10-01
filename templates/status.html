@@ -105,7 +105,7 @@
 <ul class="notes">
   <li>{{ start_ymd[:4] }}-{{ start_ymd[4:] }} 계약분부터 오래된 달 순서로, 전국 시군구별로 받습니다.</li>
   <li>호출 간격 {{ interval }}초, 하루 {{ p.daily_limit|comma }}회 이하로 제한합니다. 한도에 닿으면 다음 날 0시(KST)에 재개합니다.</li>
-  <li>최근 {{ refresh_months }}개월은 매일 다시 받습니다(신고기한 30일, 계약 해제 반영). 그 이전 달은 {{ recheck_days }}일마다 전체 건수만 확인해 바뀌었으면 다시 받습니다.</li>
+  <li>최근 {{ refresh_months }}개월은 매일 {{ refresh_at }}(KST)에 다시 받습니다(신고기한 30일, 계약 해제 반영). 그 이전 달은 {{ recheck_days }}일마다 전체 건수만 확인해 바뀌었으면 다시 받습니다.</li>
   <li>실패한 작업은 간격을 늘려 가며 자동 재시도합니다.</li>
 </ul>
 {% endblock %}
