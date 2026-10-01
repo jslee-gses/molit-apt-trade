@@ -141,6 +141,11 @@ def comma(v):
     return f"{v:,}" if isinstance(v, (int, float)) else (v or "")
 
 
+@app.template_filter("mb")
+def mb(v):
+    return f"{(v or 0) / 1024 / 1024:,.1f}MB"
+
+
 def start_background():
     c.init_db()
     c.ensure_jobs()

@@ -42,6 +42,7 @@ REFRESH_MONTHS = int(os.environ.get("REFRESH_MONTHS", "3"))    # 매일 다시 �
 REFRESH_HOURS = int(os.environ.get("REFRESH_HOURS", "24"))
 RECHECK_DAYS = int(os.environ.get("RECHECK_DAYS", "7"))        # 지난 달 건수 재확인 주기
 NUM_ROWS = 1000
+VOLUME_LIMIT_MB = int(os.environ.get("VOLUME_LIMIT_MB", "500"))  # Railway 볼륨 용량(사용률 표시용)
 
 # API 응답 필드 (기술문서 순서)
 FIELDS = [
@@ -383,9 +384,22 @@ def progress():
         trades = conn.execute("SELECT COUNT(*) FROM trades").fetchone()[0]
         last = conn.execute("SELECT MAX(fetched_at) FROM jobs").fetchone()[0]
         used = calls_today(conn)
+        page_size = conn.execute("PRAGMA page_size").fetchone()[0]
+        free_bytes = conn.execute("PRAGMA freelist_count").fetchone()[0] * page_size
     return dict(by_status=by_status, by_month=[dict(r) for r in by_month], trades=trades,
                 last_fetched=last, calls_today=used, daily_limit=DAILY_LIMIT,
-                total_jobs=sum(by_status.values()), **state)
+                total_jobs=sum(by_status.values()), storage=storage(trades, free_bytes), **state)
+
+
+def storage(trades, free_bytes):
+    """DB 파일 크기(본체+WAL)와 볼륨 한도 대비 사용률."""
+    files = {p.name: p.stat().st_size for p in DATA_DIR.glob("trades.db*") if p.is_file()}
+    total = sum(files.values())
+    db = files.get("trades.db", 0)
+    return dict(db_bytes=db, wal_bytes=files.get("trades.db-wal", 0), total_bytes=total,
+                free_bytes=free_bytes, bytes_per_trade=round(db / trades) if trades else None,
+                limit_bytes=VOLUME_LIMIT_MB * 1024 * 1024,
+                pct=round(100 * total / (VOLUME_LIMIT_MB * 1024 * 1024), 1))
 
 
 def quality_report():

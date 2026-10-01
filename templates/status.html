@@ -12,7 +12,13 @@
   <div class="tile"><div class="k">오늘 API 호출</div>
     <div class="v">{{ p.calls_today|comma }}</div>
     <div class="meter"><i style="width:{{ [100 * p.calls_today / p.daily_limit, 100]|min }}%"></i></div></div>
+  {% set st = p.storage %}
+  <div class="tile"><div class="k">DB 용량 (볼륨 {{ st.limit_bytes|mb }} 중)</div>
+    <div class="v {{ 'err' if st.pct >= 90 else ('warn' if st.pct >= 70) }}">{{ st.total_bytes|mb }}</div>
+    <div class="meter"><i style="width:{{ [st.pct, 100]|min }}%"></i></div></div>
 </div>
+<p class="meta">DB 본체 {{ st.db_bytes|mb }} · WAL {{ st.wal_bytes|mb }} · 재사용 대기 빈 공간 {{ st.free_bytes|mb }} ·
+  거래 1건당 약 {{ st.bytes_per_trade or '-' }}B · 사용률 {{ st.pct }}%</p>
 {% if p.last_error %}<p class="err">최근 오류: {{ p.last_error }}</p>{% endif %}
 
 <h2>계약월별 진행</h2>
