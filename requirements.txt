@@ -1,0 +1,5 @@
+flask==3.1.*
+gunicorn==23.*
+requests==2.32.*
+pandas==2.3.*
+apscheduler==3.11.*

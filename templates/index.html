@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block body %}
+<form class="bar" method="get">
+  <select name="sido" onchange="this.form.lawd_cd.value='';this.form.submit()">
+    <option value="">전체 시도</option>
+    {% for s in sido_list %}<option {{ 'selected' if args.sido == s }}>{{ s }}</option>{% endfor %}
+  </select>
+  <select name="lawd_cd">
+    <option value="">전체 시군구</option>
+    {% for s in sigungu_list %}<option value="{{ s.LAWD_CD }}" {{ 'selected' if args.lawd_cd == s.LAWD_CD }}>{{ s.시군구 }}</option>{% endfor %}
+  </select>
+  <select name="ymd">
+    <option value="">전체 계약월</option>
+    {% for m in months %}<option value="{{ m }}" {{ 'selected' if args.ymd == m }}>{{ m[:4] }}-{{ m[4:] }}</option>{% endfor %}
+  </select>
+  <input type="text" name="q" value="{{ args.q or '' }}" placeholder="단지명·법정동·도로명">
+  <label class="muted"><input type="checkbox" name="exclude_cancelled" value="1" {{ 'checked' if args.exclude_cancelled }}> 해제 거래 제외</label>
+  <button class="primary">조회</button>
+  <a class="btn" href="/download.csv?{{ request.query_string.decode() }}">CSV 다운로드</a>
+</form>
+
+<div class="meta">조건에 맞는 거래 {{ total|comma }}건 · 계약일 최신순</div>
+<div class="wrap">
+  <table>
+    <thead><tr>
+      <th>계약일</th><th>시도</th><th>시군구</th><th>법정동</th><th>단지명</th>
+      <th class="num">전용(㎡)</th><th class="num">층</th><th class="num">거래금액(만원)</th>
+      <th>건축년도</th><th>거래유형</th><th>해제</th><th>수집시각</th>
+    </tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr class="{{ 'cancel' if r.cdealType }}">
+        <td>{{ r.dealDate }}</td><td>{{ r.sido }}</td><td>{{ r.sigungu }}</td><td>{{ r.umdNm }}</td>
+        <td>{{ r.aptNm }}</td><td class="num">{{ r.excluUseAr }}</td><td class="num">{{ r.floor }}</td>
+        <td class="num">{{ r.dealAmount|comma }}</td><td>{{ r.buildYear }}</td><td>{{ r.dealingGbn }}</td>
+        <td>{{ r.cdealType }}</td><td class="muted">{{ r.collected_at }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="12" class="muted">아직 수집된 거래가 없습니다. 수집 현황 페이지에서 진행 상황을 확인하세요.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if pages > 1 %}
+{% set qs = request.args.to_dict() %}
+<div class="pager">
+  {% if page > 1 %}{% set _ = qs.update(page=page-1) %}<a class="btn" href="?{{ qs|urlencode }}">이전</a>{% endif %}
+  <span class="muted">{{ page }} / {{ pages|comma }}</span>
+  {% if page < pages %}{% set _ = qs.update(page=page+1) %}<a class="btn" href="?{{ qs|urlencode }}">다음</a>{% endif %}
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}수집 현황 · 아파트 실거래가{% endblock %}
+{% block body %}
+{% set done = p.by_status.get('done', 0) %}
+<div class="tiles">
+  <div class="tile"><div class="k">수집 완료 작업</div>
+    <div class="v">{{ done|comma }} / {{ p.total_jobs|comma }}</div>
+    <div class="meter"><i style="width:{{ (100 * done / p.total_jobs) if p.total_jobs else 0 }}%"></i></div></div>
+  <div class="tile"><div class="k">대기</div><div class="v">{{ p.by_status.get('pending', 0)|comma }}</div></div>
+  <div class="tile"><div class="k">오류·건수 불일치</div>
+    <div class="v {{ 'err' if q.problems }}">{{ q.problems|length|comma }}</div></div>
+  <div class="tile"><div class="k">오늘 API 호출</div>
+    <div class="v">{{ p.calls_today|comma }}</div>
+    <div class="meter"><i style="width:{{ [100 * p.calls_today / p.daily_limit, 100]|min }}%"></i></div></div>
+</div>
+{% if p.last_error %}<p class="err">최근 오류: {{ p.last_error }}</p>{% endif %}
+
+<h2>계약월별 진행</h2>
+<div class="wrap"><table>
+  <thead><tr><th>계약월</th><th class="num">완료/전체 시군구</th><th class="num">오류·불일치</th><th class="num">거래 건수</th><th>마지막 수집</th></tr></thead>
+  <tbody>
+  {% for m in p.by_month %}
+    <tr><td>{{ m.deal_ymd[:4] }}-{{ m.deal_ymd[4:] }}</td>
+      <td class="num">{{ m.done }} / {{ m.jobs }}</td>
+      <td class="num {{ 'err' if m.bad }}">{{ m.bad }}</td>
+      <td class="num">{{ m.trades|comma }}</td><td class="muted">{{ m.last_fetched or "" }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+
+<h2>누락 점검</h2>
+<div class="wrap"><table>
+  <thead><tr><th>점검 항목</th><th>결과</th><th>설명</th></tr></thead>
+  <tbody>
+    <tr><td>① 전체 건수 일치</td>
+      <td class="{{ 'err' if q.problems else 'ok' }}">{{ '불일치·오류 %d건'|format(q.problems|length) if q.problems else '이상 없음' }}</td>
+      <td class="muted">API가 알려준 totalCount와 실제 저장 건수를 작업마다 비교</td></tr>
+    <tr><td>② 거래 0건 시군구</td>
+      <td class="{{ 'warn' if q.zero_codes else 'ok' }}">{{ '%d곳'|format(q.zero_codes|length) if q.zero_codes else '없음' }}</td>
+      <td class="muted">받은 달이 모두 0건 → 행정구역 개편으로 코드가 바뀌었을 가능성</td></tr>
+    <tr><td>③ 응답 코드 불일치</td>
+      <td class="{{ 'warn' if q.sgg_mismatch else 'ok' }}">{{ '%d건'|format(q.sgg_mismatch|length) if q.sgg_mismatch else '없음' }}</td>
+      <td class="muted">요청한 시군구코드와 응답의 sggCd가 다른 경우</td></tr>
+    <tr><td>④ 계약월 불일치</td>
+      <td class="{{ 'warn' if q.ymd_mismatch else 'ok' }}">{{ q.ymd_mismatch|comma }}건</td>
+      <td class="muted">요청한 계약월과 dealDate가 다르거나 날짜가 비어 있는 행</td></tr>
+    <tr><td>⑤ 완전 중복 행</td>
+      <td class="{{ 'warn' if q.duplicates else 'ok' }}">{{ q.duplicates|comma }}건</td>
+      <td class="muted">모든 필드가 같은 행. 같은 날 같은 층·가격 거래일 수도 있어 참고용</td></tr>
+    <tr><td>⑥ 해제된 거래</td><td>{{ q.cancelled|comma }}건</td>
+      <td class="muted">계약 해제 신고된 거래(삭제하지 않고 표시만 함)</td></tr>
+  </tbody>
+</table></div>
+
+<h2>필드별 빈 값 (지오코딩·분석용)</h2>
+<div class="wrap"><table>
+  <thead><tr><th>필드</th><th class="num">빈 값</th><th class="num">비율</th></tr></thead>
+  <tbody>
+  {% for b in q.blanks %}
+    <tr><td>{{ b.field }}</td><td class="num">{{ b.missing|comma }}</td>
+      <td class="num {{ 'warn' if b.pct >= 1 }}">{{ b.pct }}%</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+
+{% if q.problems %}
+<h2>재시도 대기 작업</h2>
+<div class="wrap"><table>
+  <thead><tr><th>계약월</th><th>시군구</th><th>상태</th><th class="num">전체</th><th class="num">저장</th><th class="num">시도 횟수</th><th>사유</th><th>다음 시도</th></tr></thead>
+  <tbody>
+  {% for r in q.problems %}
+    <tr><td>{{ r.deal_ymd }}</td><td>{{ r.name }} ({{ r.lawd_cd }})</td><td class="err">{{ r.status }}</td>
+      <td class="num">{{ r.total_count if r.total_count is not none else '' }}</td>
+      <td class="num">{{ r.stored_count if r.stored_count is not none else '' }}</td>
+      <td class="num">{{ r.attempts }}</td><td>{{ r.error or '' }}</td><td class="muted">{{ r.next_try_at or '' }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% endif %}
+
+{% if q.zero_codes %}
+<h2>거래 0건 시군구</h2>
+<div class="wrap"><table>
+  <thead><tr><th>시군구</th><th>코드</th><th class="num">받은 달 수</th></tr></thead>
+  <tbody>{% for r in q.zero_codes %}<tr><td>{{ r.name }}</td><td>{{ r.lawd_cd }}</td><td class="num">{{ r.months }}</td></tr>{% endfor %}</tbody>
+</table></div>
+{% endif %}
+
+{% if q.changes %}
+<h2>재수집 시 건수 변동 (최근 50건)</h2>
+<div class="wrap"><table>
+  <thead><tr><th>시각</th><th>계약월</th><th>시군구</th><th class="num">이전</th><th class="num">이후</th></tr></thead>
+  <tbody>{% for r in q.changes %}<tr><td class="muted">{{ r.at }}</td><td>{{ r.deal_ymd }}</td><td>{{ r.name }}</td>
+    <td class="num">{{ r.before|comma }}</td><td class="num">{{ r.after|comma }}</td></tr>{% endfor %}</tbody>
+</table></div>
+{% endif %}
+
+<h2>수집 방식</h2>
+<ul class="notes">
+  <li>{{ start_ymd[:4] }}-{{ start_ymd[4:] }} 계약분부터 오래된 달 순서로, 전국 시군구별로 받습니다.</li>
+  <li>호출 간격 {{ interval }}초, 하루 {{ p.daily_limit|comma }}회 이하로 제한합니다. 한도에 닿으면 다음 날 0시(KST)에 재개합니다.</li>
+  <li>최근 {{ refresh_months }}개월은 매일 다시 받습니다(신고기한 30일, 계약 해제 반영). 그 이전 달은 {{ recheck_days }}일마다 전체 건수만 확인해 바뀌었으면 다시 받습니다.</li>
+  <li>실패한 작업은 간격을 늘려 가며 자동 재시도합니다.</li>
+</ul>
+{% endblock %}
