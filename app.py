@@ -34,12 +34,14 @@ def create_app():
 
     flask_app = Flask(__name__)
     flask_app.secret_key = settings.require("SECRET_KEY")
+    settings.require("APP_PASSWORD")  # 없으면 시작 단계에서 실패
     flask_app.config.update(
         PERMANENT_SESSION_LIFETIME=timedelta(days=30),
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=bool(settings.env("RAILWAY_ENVIRONMENT")),  # Railway(HTTPS)에서만
     )
     # Railway 프록시 뒤: 실제 클라이언트 IP·https를 반영(시도 제한·보안 쿠키용)
+    # 가정: Railway 엣지 프록시가 실제 클라이언트 IP를 X-Forwarded-For의 마지막 항목으로 덧붙인다
     flask_app.wsgi_app = ProxyFix(flask_app.wsgi_app, x_for=1, x_proto=1)
     flask_app.json = JSONProvider(flask_app)
     db.migrate()

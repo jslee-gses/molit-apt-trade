@@ -39,9 +39,10 @@ def test_login_success_redirects_to_next(anon):
     assert anon.get("/status").status_code == 200
 
 
-@pytest.mark.parametrize("bad_next", ["//evil.example", "https://evil.example", "/\\evil.example"])
+@pytest.mark.parametrize("bad_next", ["//evil.example", "https://evil.example", "/\\evil.example", "/%09/evil.example", "/%0a/x"])
 def test_login_rejects_external_next(anon, bad_next):
     resp = anon.post(f"/login?next={bad_next}", data={"password": "test-password"})
+    assert resp.status_code == 302
     assert resp.headers["Location"] == "/"
 
 
@@ -56,3 +57,8 @@ def test_logout(client):
     assert client.get("/status").status_code == 200
     client.post("/logout")
     assert client.get("/status").status_code == 302
+
+
+def test_login_next_logout_goes_home(anon):
+    resp = anon.post("/login?next=/logout", data={"password": "test-password"})
+    assert resp.status_code == 302 and resp.headers["Location"] == "/"

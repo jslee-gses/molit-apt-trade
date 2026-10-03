@@ -3,7 +3,7 @@ import hmac
 import threading
 import time
 from collections import defaultdict, deque
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
 
@@ -26,9 +26,14 @@ def reset():
 def _recent_failures(ip):
     now = time.monotonic()
     with _failures_lock:
-        q = _failures[ip]
+        q = _failures.get(ip)
+        if q is None:
+            return 0
         while q and now - q[0] > WINDOW_SECONDS:
             q.popleft()
+        if not q:
+            del _failures[ip]
+            return 0
         return len(q)
 
 
@@ -38,8 +43,13 @@ def _record_failure(ip):
 
 
 def _safe_next(target):
-    """같은 사이트 안의 경로만 허용한다(//host, scheme://, 역슬래시 우회 차단)."""
+    """같은 사이트 안의 경로만 허용한다(//host, scheme://, 역슬래시, 제어문자 우회 차단)."""
     if not target or not target.startswith("/") or target.startswith("//") or "\\" in target:
+        return "/"
+    if any(ord(c) < 0x21 or ord(c) == 0x7F for c in target):
+        return "/"
+    parts = urlsplit(target)
+    if parts.scheme or parts.netloc or parts.path == "/logout":
         return "/"
     return target
 
