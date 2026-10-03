@@ -7,6 +7,14 @@ from geo import hooks
 
 FLAG = "complexes_bootstrapped"
 
+COMPLEXES_LOCK = 7_203_001_001   # complexes를 쓰는 모든 경로가 공유하는 어드바이저리 락 키(고정값)
+
+
+def lock_complexes(conn):
+    """complexes 쓰기를 한 번에 하나씩만 하도록 직렬화한다(수집·지리 스레드의 행 락 교착 방지).
+    반드시 트랜잭션 안에서, complexes 행을 건드리기 전에 가장 먼저 부른다(커밋·롤백 때 풀린다)."""
+    conn.execute("SELECT pg_advisory_xact_lock(%s)", (COMPLEXES_LOCK,))
+
 UPSERT = """
 INSERT INTO complexes AS c (apt_seq, apt_nm, jibun, road_nm, build_year,
                             api_sgg_cd, api_umd_cd, api_umd_nm, last_deal_date)
@@ -33,6 +41,7 @@ def register(conn, lawd_cd, deal_ymd, rows):
         cur = latest.get(seq)
         if cur is None or (r["deal_date"] or date.min) >= (cur["deal_date"] or date.min):
             latest[seq] = {**r, "apt_seq": seq}
+    lock_complexes(conn)
     if latest:
         with conn.cursor() as cur:
             cur.executemany(UPSERT, list(latest.values()))
@@ -43,6 +52,12 @@ def bootstrap(conn):
     register가 먼저 넣은 행은 그대로 둔다."""
     if conn.execute("SELECT 1 FROM app_flags WHERE name = %s", (FLAG,)).fetchone():
         return 0
+    with conn.transaction():
+        lock_complexes(conn)
+        return _bootstrap(conn)
+
+
+def _bootstrap(conn):
     n = conn.execute("""
         INSERT INTO complexes (apt_seq, apt_nm, jibun, road_nm, build_year,
                                api_sgg_cd, api_umd_cd, api_umd_nm, last_deal_date)
@@ -69,6 +84,7 @@ def set_manual(conn, apt_seq, lon, lat):
     if not (math.isfinite(lon) and math.isfinite(lat) and x0 <= lon <= x1 and y0 <= lat <= y1):
         raise ValueError("한국 범위의 경도(124~132)·위도(33~39)가 아닙니다. 순서가 바뀌지 않았는지 확인하세요.")
     with conn.transaction():
+        lock_complexes(conn)
         if not conn.execute("SELECT 1 FROM complexes WHERE apt_seq = %s FOR UPDATE", (apt_seq,)).fetchone():
             raise LookupError(apt_seq)
         for hook in hooks.ON_REGION_CHANGE:   # 바뀌기 전 지역
@@ -101,11 +117,11 @@ def summary(conn):
 
 
 def failed(conn, limit=100):
-    """좌표를 못 찾은 단지(거래 많은 순)."""
+    """좌표를 못 찾은 단지: 최근 거래 순으로 limit개를 고른 뒤 거래 많은 순으로 보여 준다."""
     return conn.execute("""
         SELECT c.apt_seq, c.apt_nm, c.api_sgg_cd, c.api_umd_nm, c.jibun, c.road_nm, c.last_deal_date,
-               COUNT(t.id) AS n_trades
-          FROM complexes c LEFT JOIN trades t ON t.apt_seq = c.apt_seq
-         WHERE c.geocode_status = 'failed'
-         GROUP BY c.apt_seq
-         ORDER BY n_trades DESC, c.apt_seq LIMIT %s""", (limit,)).fetchall()
+               t.n AS n_trades
+          FROM (SELECT * FROM complexes WHERE geocode_status = 'failed'
+                 ORDER BY last_deal_date DESC NULLS LAST, apt_seq LIMIT %s) c
+          CROSS JOIN LATERAL (SELECT COUNT(*) AS n FROM trades WHERE apt_seq = c.apt_seq) t
+         ORDER BY t.n DESC, c.apt_seq""", (limit,)).fetchall()

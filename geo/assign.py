@@ -11,7 +11,7 @@ from shapely.geometry import Point, shape
 from shapely.ops import nearest_points
 
 import settings
-from geo import hooks
+from geo import complexes, hooks
 
 GEO_DATA = settings.BASE_DIR / "geo_data"
 NEAREST_M = 200
@@ -90,6 +90,7 @@ def apply_results(conn, results):
     """판정 결과를 반영한다. 계산 뒤 좌표·상태가 바뀐 단지는 건드리지 않아 다음 실행에서 다시 판정된다."""
     seqs = [r["apt_seq"] for r in results]
     with conn.transaction():
+        complexes.lock_complexes(conn)
         for hook in hooks.ON_REGION_CHANGE:   # 바뀌기 전 지역
             hook(conn, seqs)
         with conn.cursor() as cur:

@@ -76,9 +76,12 @@ API로 대량 조회해 저장하는 것은 이용 조건 위반이다).
 `complexes.bootstrap`은 배포 후 첫 파이프라인 실행에서 한 번만 돌아, 기존 `trades` 전체에서 단지를 만든다
 (완료하면 `app_flags`에 `complexes_bootstrapped` 표식을 남긴다). 거래 전체를 한 번에 정렬하므로
 거래가 많은 운영 DB에서는 **첫 실행이 몇 분 걸릴 수 있다.**
-- 시간 초과가 나면 단지를 만드는 INSERT만 취소되고 표식은 쓰이지 않는다(같은 실행의 다른 단계는 그대로 반영된다).
-  그냥 두면 다음 10분 주기에 다시 시도한다(표식이 쓰이기 전까지 반복해도 안전하다).
+- 시간 초과 등으로 실패하면 단지를 만드는 INSERT와 표식 쓰기가 함께 취소된다. 실패는 기록(`bootstrap_error`)만 하고
+  좌표 연결·지역 판정 등 나머지 단계는 그대로 이어서 실행한다. 그냥 두면 다음 10분 주기에 다시 시도한다
+  (표식이 쓰이기 전까지 반복해도 안전하다).
 - 계속 실패하면 한도를 늘린다: `ALTER DATABASE <db> SET statement_timeout = '30min';` (필요하면 `work_mem`도 같은 방식으로 올린다).
   새 설정은 새 연결부터 적용된다. `complexes_bootstrapped` 표식이 쓰인 것을 확인한 뒤 `ALTER DATABASE <db> RESET statement_timeout;`
   (`RESET work_mem`)으로 되돌린다.
+  단, 단지 생성 뒤 적재한 주소 좌표(A)로 처음 좌표 연결(LOCATE)이 끝날 때까지는 올린 `statement_timeout`을 유지한다
+  (그 첫 LOCATE는 전체 거래를 한 번 훑는다).
 - 진행 여부는 `/status`의 "마지막 처리 …" 줄(오류 표시)로 확인한다.

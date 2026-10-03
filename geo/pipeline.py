@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 _lock = threading.Lock()
 RETRY_AFTER = timedelta(hours=1)
 _failed = None   # (버전, 실패 시각): 같은 버전 전환을 한동안 다시 시도하지 않는다
-state = {"last_attempt": None, "last_run": None, "sync_error": None, "last_result": None, "last_error": None}
+state = {"last_attempt": None, "last_run": None, "sync_error": None, "bootstrap_error": None, "last_result": None, "last_error": None}
 AFTER_RUN = []   # fn(conn). 계획 3: 집계 대기열 처리
 
 
@@ -35,6 +35,18 @@ def _sync(conn):
     return switched
 
 
+def _bootstrap(conn):
+    """단지 최초 생성 실패(시간 초과 등)가 나머지 처리를 막지 않게 한다. 표식이 없으면 다음 실행에서 다시 시도한다."""
+    try:
+        added = complexes.bootstrap(conn)
+    except Exception as e:  # noqa: BLE001
+        state["bootstrap_error"] = f"{settings.now_str()} {type(e).__name__}: {e}"
+        log.exception("단지 최초 생성 실패")
+        return 0
+    state["bootstrap_error"] = None
+    return added
+
+
 def run():
     if not _lock.acquire(blocking=False):
         return
@@ -42,7 +54,7 @@ def run():
     try:
         with db.connection() as conn:
             switched = _sync(conn)
-            added = complexes.bootstrap(conn)
+            added = _bootstrap(conn)
             located = locate.locate_pending(conn)
             version = versions.active(conn)
             assigned = assign.assign_pending(conn, version) if version else 0

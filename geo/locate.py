@@ -1,5 +1,6 @@
 """pending 단지에 위치정보요약DB 좌표를 붙인다(도로명주소 매칭, 외부 API 호출 없음)."""
 import settings
+from geo import complexes
 
 # 단지의 거래들이 가진 도로명주소 키 중 address_points에 있는 것, 그중 거래가 가장 많은 키의 좌표
 LOCATE = """
@@ -49,6 +50,7 @@ def finish_snapshot(conn):
 def locate_pending(conn):
     """→ {"ok": 좌표를 붙인 단지 수, "failed": 이번에 못 찾은 단지 수}"""
     with conn.transaction():
+        complexes.lock_complexes(conn)
         snapshot_pending(conn)
         return finish_snapshot(conn)
 

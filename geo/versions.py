@@ -9,7 +9,7 @@ import logging
 import re
 
 import settings
-from geo import assign, hooks
+from geo import assign, complexes, hooks
 
 log = logging.getLogger(__name__)
 VERSION_RE = re.compile(r"^\d{4}-\d{2}$")
@@ -51,6 +51,7 @@ def switch(conn, version, data_dir=None):
                         "WHERE geocode_status IN ('ok', 'manual') AND lon IS NOT NULL AND lat IS NOT NULL").fetchall()
     results = [assign.assign_row(boundary, r, version) for r in rows]
     with conn.transaction():
+        complexes.lock_complexes(conn)
         conn.execute("CREATE TEMP TABLE staged_regions (apt_seq TEXT PRIMARY KEY, umd TEXT, sgg TEXT, "
                      "match TEXT, version TEXT, mismatch BOOLEAN, lon DOUBLE PRECISION, lat DOUBLE PRECISION) "
                      "ON COMMIT DROP")

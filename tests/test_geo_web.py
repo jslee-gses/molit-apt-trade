@@ -72,3 +72,13 @@ def test_manual_coords_rejects_bad_values(client, seeded, pg):
 def test_status_page_shows_geo(client, seeded):
     html = client.get("/status").get_data(as_text=True)
     assert "단지 좌표·지역 판정" in html and "나단지" in html
+
+
+def test_failed_ranks_candidates_by_recent_deal_before_counting(pg):
+    with pg.connection() as conn:
+        conn.execute("DELETE FROM complexes")
+        conn.execute("INSERT INTO complexes (apt_seq, api_sgg_cd, geocode_status, last_deal_date) VALUES "
+                     "('OLD', '11110', 'failed', '2020-01-01'), ('NEW', '11110', 'failed', '2026-01-01'), "
+                     "('NUL', '11110', 'failed', NULL)")
+        got = [r["apt_seq"] for r in complexes.failed(conn, limit=2)]
+    assert got == ["NEW", "OLD"]

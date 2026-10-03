@@ -131,7 +131,8 @@
 <p class="meta">활성 경계 {{ g.boundary_version or '없음' }} · 위치정보요약DB {{ g.address_month or '미적재' }}
   ({{ g.address_points|comma }}건) · 마지막 처리 {{ g.pipeline.last_run or '-' }}
   {% if g.pipeline.last_error %}<span class="err">· {{ g.pipeline.last_error }}</span>{% endif %}
-  {% if g.pipeline.sync_error %}<span class="err">· {{ g.pipeline.sync_error }}</span>{% endif %}</p>
+  {% if g.pipeline.sync_error %}<span class="err">· {{ g.pipeline.sync_error }}</span>{% endif %}
+  {% if g.pipeline.bootstrap_error %}<span class="err">· {{ g.pipeline.bootstrap_error }}</span>{% endif %}</p>
 {% if g.failed %}
 <h2>좌표를 찾지 못한 단지 (거래 많은 순 {{ g.failed|length }}개)</h2>
 <div class="wrap"><table>
