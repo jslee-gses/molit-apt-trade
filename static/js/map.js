@@ -14,6 +14,7 @@
   const mini = App.chart(el('mini'));
   const geoCache = {};
   let seq = 0;
+  let miniSeq = 0;
   let data = null;
 
   // 지표/면적 검증
@@ -83,6 +84,7 @@
         visualMap: visualMap(kind, nums, f),
         series: [{
           type: 'map', map: name, nameProperty: 'region_cd', data: vals, roam: true, selectedMode: false,
+          top: 16, bottom: 72, left: 8, right: 8,
           itemStyle: { areaColor: App.css('--track'), borderColor: App.css('--card'), borderWidth: 1 },
           emphasis: { label: { show: true, color: App.css('--text'), formatter: (p) => p.data?.raw?.name ?? '' }, itemStyle: { borderColor: App.css('--text'), borderWidth: 2 } },
         }],
@@ -111,13 +113,16 @@
 
   async function showMini(v) {
     if (!v) return;
-    const key = `${data.level}:${v.region_cd}`;
+    const my = ++miniSeq;
+    const level = data.level, to = data.to;
+    const key = `${level}:${v.region_cd}`;
     el('side').hidden = false;
+    mini.resize();
     el('side-name').textContent = `${v.full_name} · 중위 거래가 최근 36개월`;
     el('side-link').href = `/trends?regions=${encodeURIComponent(key)}&band=${state.band}`;
     try {
-      const to = data.to;
       const agg = await App.api('/api/agg', { regions: key, band: state.band, from: App.shiftYm(to, -35), to });
+      if (my !== miniSeq) return;
       const months = App.monthRange(agg.from, agg.to);
       const by = Object.fromEntries(agg.series[0].points.map((p) => [p.ym, p]));
       const base = App.baseOption();
@@ -128,7 +133,7 @@
         tooltip: { ...base.tooltip, valueFormatter: App.fmt.eok },
         series: [{ name: '중위 거래가', type: 'line', data: months.map((m) => by[m]?.median_price ?? null), color: App.seriesColor(0), symbol: 'none', lineStyle: { width: 2 } }],
       }, true);
-    } catch (e) { App.message(el('msg'), e.message); }
+    } catch (e) { if (my !== miniSeq) return; App.message(el('msg'), e.message); }
   }
 
   chart.on('click', (p) => {
