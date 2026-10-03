@@ -51,6 +51,7 @@
     <a href="/" class="{{ 'on' if request.path == '/' }}">거래 목록</a>
     <a href="/status" class="{{ 'on' if request.path == '/status' }}">수집 현황·누락 점검</a>
   </nav>
+  {% if p is defined %}
   <div class="meta">
     출처: 국토교통부 실거래가 정보(공공데이터포털 Open API) ·
     누적 {{ p.trades|comma }}건 · 마지막 수집 {{ p.last_fetched or "없음" }} ·
@@ -58,6 +59,7 @@
     {% if p.running %} · <b>수집 중</b> {{ p.current or "" }}{% endif %}
     {% if p.paused_until %} · <span class="warn">한도 도달, {{ p.paused_until }}부터 재개</span>{% endif %}
   </div>
+  {% endif %}
   {% block body %}{% endblock %}
 </main>
 </body>

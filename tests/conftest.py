@@ -32,3 +32,20 @@ def pg():
     db.migrate()
     yield db
     db.close_pool()
+
+
+@pytest.fixture
+def app(pg):
+    import app as app_module
+    flask_app = app_module.create_app()
+    flask_app.config.update(TESTING=True)
+    return flask_app
+
+
+@pytest.fixture
+def client(app):
+    """로그인된 테스트 클라이언트."""
+    c = app.test_client()
+    with c.session_transaction() as s:
+        s["auth"] = True
+    return c
