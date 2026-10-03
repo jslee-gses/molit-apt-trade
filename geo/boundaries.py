@@ -37,8 +37,19 @@ class UnknownCodes(Exception):
         super().__init__(f"lawd_codes.csv에 없는 시군구의 읍면동 코드 {len(self.codes)}개")
 
 
-def load_emd(path, src_crs=None):
-    gdf = gpd.read_file(path)
+def _polygonal(geom):
+    """유효하게 고친 뒤 면(Polygon/MultiPolygon)만 남긴다. 면이 없으면 None."""
+    if geom is None or geom.is_empty:
+        return None
+    geom = shapely.make_valid(geom)
+    if geom.geom_type in ("Polygon", "MultiPolygon"):
+        return None if geom.is_empty else geom
+    parts = [g for g in getattr(geom, "geoms", []) if g.geom_type in ("Polygon", "MultiPolygon") and not g.is_empty]
+    return shapely.union_all(parts) if parts else None
+
+
+def load_emd(path, src_crs=None, encoding=None):
+    gdf = gpd.read_file(path, encoding=encoding) if encoding else gpd.read_file(path)
     geom = gdf.geometry.name
     gdf = gdf.rename(columns={c: c.lower() for c in gdf.columns if c != geom})
     if gdf.crs is None:
@@ -48,14 +59,21 @@ def load_emd(path, src_crs=None):
     gdf = gdf.rename(columns={"emd_kor_nm": "name"})
     gdf["emd_cd"] = gdf["emd_cd"].astype(str).str.strip().str.zfill(8)
     gdf = gdf.rename_geometry("geometry") if geom != "geometry" else gdf
-    return gdf[["emd_cd", "name", "geometry"]].to_crs(METRIC_CRS)
+    gdf = gdf[["emd_cd", "name", "geometry"]].copy()
+    fixed = [_polygonal(g) for g in gdf.geometry]
+    dropped = sum(g is None for g in fixed)
+    if dropped:
+        print(f"경고: 면적이 없거나 비어 있는 경계 {dropped}개를 제외했습니다.")
+    gdf["geometry"] = gpd.GeoSeries(fixed, index=gdf.index, crs=gdf.crs)
+    gdf = gdf[gdf.geometry.notna()]
+    return gdf.to_crs(METRIC_CRS)
 
 
 def read_code_map(path=CODE_MAP):
     if not Path(path).exists():
         return {}
     df = pd.read_csv(path, dtype=str, keep_default_na=False)
-    return dict(zip(df["old_emd_cd"].str.strip(), df["new_emd_cd"].str.strip()))
+    return dict(zip(df["old_emd_cd"].str.strip().str.zfill(8), df["new_emd_cd"].str.strip().str.zfill(8)))
 
 
 def normalize_codes(emd, valid_sgg, code_map):
@@ -78,15 +96,29 @@ def _to_web(gdf):
     out = gdf.to_crs("EPSG:4326")
     precise = shapely.set_precision(out.geometry.values, 1e-5)   # 약 1m
     out["geometry"] = gpd.GeoSeries(precise, index=out.index, crs=out.crs)
+    empty = out.geometry.isna() | out.geometry.is_empty
+    if empty.any():
+        print(f"경고: 단순화 후 비어 버린 경계 {int(empty.sum())}개를 제외했습니다.")
+        out = out[~empty]
     return out
+
+
+def _round_coords(c, nd=5):
+    if isinstance(c, (list, tuple)):
+        if c and isinstance(c[0], (int, float)):
+            return [round(v, nd) for v in c]
+        return [_round_coords(x, nd) for x in c]
+    return c
 
 
 def _write_geojson(gdf, path, props, gz=False):
     data = json.loads(gdf[props + ["geometry"]].to_json(drop_id=True))
+    for f in data["features"]:
+        f["geometry"]["coordinates"] = _round_coords(f["geometry"]["coordinates"])
     text = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     path.parent.mkdir(parents=True, exist_ok=True)
     if gz:
-        path.write_bytes(gzip.compress(text.encode("utf-8")))
+        path.write_bytes(gzip.compress(text.encode("utf-8"), mtime=0))
     else:
         path.write_text(text, encoding="utf-8")
 
@@ -144,11 +176,12 @@ def main(argv=None):
     parser.add_argument("--shp", required=True, help="LT_C_ADEMD_INFO .shp(.zip) 경로")
     parser.add_argument("--version", required=True, help="경계 버전 YYYY-MM")
     parser.add_argument("--src-crs", help="경계 파일에 .prj가 없을 때 좌표계")
+    parser.add_argument("--encoding", help="속성 인코딩(기본: 자동). 한글이 깨지면 cp949 지정")
     parser.add_argument("--source", default="", help="출처 메모(meta.json에 기록)")
     args = parser.parse_args(argv)
 
     codes_df = lawd.load_codes()
-    emd = load_emd(args.shp, args.src_crs)
+    emd = load_emd(args.shp, args.src_crs, args.encoding)
     try:
         emd = normalize_codes(emd, set(codes_df["LAWD_CD"]), read_code_map())
     except UnknownCodes as e:
@@ -158,6 +191,9 @@ def main(argv=None):
         return 1
     regions = build(emd, codes_df, args.version, args.source or str(args.shp))
     print(f"경계 {args.version}: " + ", ".join(f"{k} {v}개" for k, v in regions["level"].value_counts().items()))
+    for base in (STATIC_GEO, GEO_DATA):
+        for f in sorted((base / args.version).glob("*")):
+            print(f"  {f.relative_to(base.parent)}  {f.stat().st_size / 1024:.1f} KB")
     return 0
 
 

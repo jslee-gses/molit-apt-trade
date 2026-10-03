@@ -85,3 +85,39 @@ def test_main_reports_unknown_codes(tmp_path, capsys, monkeypatch):
     monkeypatch.setattr(boundaries, "GEO_DATA", tmp_path / "data")
     assert boundaries.main(["--shp", str(path), "--version", "2026-10"]) == 1
     assert "99999101" in capsys.readouterr().out
+
+
+def test_load_emd_repairs_invalid_and_drops_empty(tmp_path):
+    from shapely.geometry import Polygon
+    bow = Polygon([(X0, Y0), (X0 + 1000, Y0 + 1000), (X0 + 1000, Y0), (X0, Y0 + 1000)])
+    src = gpd.GeoDataFrame(
+        {"EMD_CD": ["11110101", "11110102", "11110103"], "EMD_KOR_NM": ["청운동", "신교동", "빈동"]},
+        geometry=[bow, box(X0 + 2000, Y0, X0 + 3000, Y0 + 1000), None], crs="EPSG:5179")
+    path = tmp_path / "emd.gpkg"
+    src.to_file(path)
+    out = boundaries.load_emd(path)
+    assert sorted(out["emd_cd"]) == ["11110101", "11110102"]
+    assert out.geometry.is_valid.all()
+    emd = boundaries.normalize_codes(out, {"11110"}, {})
+    boundaries.build(emd, codes.load_codes(), "2026-10", "t", tmp_path / "s", tmp_path / "d")
+
+
+def test_coordinates_rounded_to_five_decimals(tmp_path):
+    emd = boundaries.normalize_codes(emd_frame(ROWS), {"11110", "11140"}, {})
+    boundaries.build(emd, codes.load_codes(), "2026-10", "t", tmp_path / "s", tmp_path / "d")
+    text = (tmp_path / "s" / "2026-10" / "sgg.json").read_text(encoding="utf-8")
+    import re
+    nums = re.findall(r"\d+\.(\d+)", text)
+    assert nums and max(len(n) for n in nums) <= 5
+
+
+def test_gzip_is_reproducible_and_code_map_zero_pads(tmp_path):
+    emd = boundaries.normalize_codes(emd_frame(ROWS), {"11110", "11140"}, {})
+    args = (emd, codes.load_codes(), "2026-10", "t")
+    boundaries.build(*args, tmp_path / "s", tmp_path / "d1")
+    boundaries.build(*args, tmp_path / "s", tmp_path / "d2")
+    assert ((tmp_path / "d1" / "2026-10" / "umd_assign.geojson.gz").read_bytes()
+            == (tmp_path / "d2" / "2026-10" / "umd_assign.geojson.gz").read_bytes())
+    m = tmp_path / "m.csv"
+    m.write_text("old_emd_cd,new_emd_cd\n1111010,1114010\n", encoding="utf-8")
+    assert boundaries.read_code_map(m) == {"01111010": "01114010"}
