@@ -5,6 +5,7 @@ from flask import Blueprint, redirect, render_template, request, url_for
 
 import db
 import settings
+from analytics import params
 from collector import jobs, quality
 from geo import complexes, pipeline
 from web.common import CODES, SIDO, api_row, filters
@@ -26,6 +27,11 @@ def count_trades(conn, args):
 @bp.route("/")
 def dashboard():
     return render_template("dashboard.html", p=jobs.progress())
+
+
+@bp.route("/trends")
+def trends_page():
+    return render_template("trends.html", p=jobs.progress(), bands=params.BANDS)
 
 
 @bp.route("/trades")

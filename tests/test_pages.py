@@ -29,3 +29,9 @@ def test_dashboard(client, seeded):
 def test_trades_list_moved(client, seeded):
     html = client.get("/trades?lawd_cd=11140").get_data(as_text=True)
     assert "무교타워" in html and "청운아파트" not in html
+
+
+def test_trends_page(client, seeded):
+    html = client.get("/trends").get_data(as_text=True)
+    assert 'id="chart"' in html and "js/trends.js" in html
+    assert '<option value="le60">60㎡ 이하</option>' in html
