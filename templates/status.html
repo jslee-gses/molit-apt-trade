@@ -116,6 +116,49 @@
 </table></div>
 {% endif %}
 
+<h2>단지 좌표·지역 판정</h2>
+<div class="tiles">
+  <div class="tile"><div class="k">좌표 확보 단지</div>
+    <div class="v">{{ g.located|comma }} / {{ g.total|comma }}</div>
+    <div class="meter"><i style="width:{{ g.located_pct }}%"></i></div></div>
+  <div class="tile"><div class="k">좌표 못 찾음</div>
+    <div class="v {{ 'warn' if g.by_status.get('failed') }}">{{ g.by_status.get('failed', 0)|comma }}</div></div>
+  <div class="tile"><div class="k">경계 밖(미배정)·근접 배정</div>
+    <div class="v">{{ g.outside|comma }} · {{ g.nearest|comma }}</div></div>
+  <div class="tile"><div class="k">API 시군구 ≠ 좌표 시군구</div>
+    <div class="v {{ 'warn' if g.mismatch }}">{{ g.mismatch|comma }}</div></div>
+</div>
+<p class="meta">활성 경계 {{ g.boundary_version or '없음' }} · 위치정보요약DB {{ g.address_month or '미적재' }}
+  ({{ g.address_points|comma }}건) · 마지막 처리 {{ g.pipeline.last_run or '-' }}
+  {% if g.pipeline.last_error %}<span class="err">· {{ g.pipeline.last_error }}</span>{% endif %}
+  {% if g.pipeline.sync_error %}<span class="err">· {{ g.pipeline.sync_error }}</span>{% endif %}</p>
+{% if g.failed %}
+<h2>좌표를 찾지 못한 단지 (거래 많은 순 {{ g.failed|length }}개)</h2>
+<div class="wrap"><table>
+  <thead><tr><th>단지</th><th>시군구코드</th><th>법정동</th><th>지번</th><th>도로명</th><th class="num">거래</th>
+    <th>최근 계약일</th><th>수동 좌표 (경도, 위도)</th></tr></thead>
+  <tbody>
+  {% for r in g.failed %}
+    <tr><td>{{ r.apt_nm }}</td><td>{{ r.api_sgg_cd }}</td><td>{{ r.api_umd_nm }}</td><td>{{ r.jibun }}</td>
+      <td>{{ r.road_nm }}</td><td class="num">{{ r.n_trades|comma }}</td><td>{{ r.last_deal_date or '' }}</td>
+      <td><input name="lon" size="10" placeholder="127.0"> <input name="lat" size="9" placeholder="37.5">
+        <button data-seq="{{ r.apt_seq }}" onclick="saveCoords(this)">저장</button></td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+<script>
+async function saveCoords(btn) {
+  const tr = btn.closest('tr');
+  const body = { lon: parseFloat(tr.querySelector('[name=lon]').value),
+                 lat: parseFloat(tr.querySelector('[name=lat]').value) };
+  const resp = await fetch(`/api/complexes/${encodeURIComponent(btn.dataset.seq)}/coords`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const data = await resp.json().catch(() => ({}));
+  btn.textContent = resp.ok ? '저장됨' : (data.error || '오류');
+}
+</script>
+{% endif %}
+
 <h2>수집 방식</h2>
 <ul class="notes">
   <li>{{ start_ymd[:4] }}-{{ start_ymd[4:] }} 계약분부터 오래된 달 순서로, 전국 시군구별로 받습니다. 매일 최근 자료를 먼저 갱신한 뒤 남은 한도로 과거 자료를 받습니다.</li>

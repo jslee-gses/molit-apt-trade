@@ -7,6 +7,7 @@ from flask import Blueprint, Response, render_template, request
 import db
 import settings
 from collector import jobs, quality
+from geo import complexes, pipeline
 from web.common import CODES, LABELS, SIDO, api_row, filters
 
 bp = Blueprint("pages", __name__)
@@ -52,8 +53,10 @@ def index():
 
 @bp.route("/status")
 def status():
+    with db.connection() as conn:
+        g = dict(complexes.summary(conn), failed=complexes.failed(conn), pipeline=pipeline.state)
     return render_template(
-        "status.html", p=jobs.progress(), q=quality.quality_report(), start_ymd=settings.START_YMD,
+        "status.html", p=jobs.progress(), q=quality.quality_report(), g=g, start_ymd=settings.START_YMD,
         refresh_months=settings.REFRESH_MONTHS, refresh_at=settings.REFRESH_AT,
         recheck_days=settings.RECHECK_DAYS, old_recheck_days=settings.OLD_RECHECK_DAYS,
         interval=settings.REQUEST_INTERVAL,
