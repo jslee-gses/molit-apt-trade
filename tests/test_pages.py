@@ -35,3 +35,8 @@ def test_trends_page(client, seeded):
     html = client.get("/trends").get_data(as_text=True)
     assert 'id="chart"' in html and "js/trends.js" in html
     assert '<option value="le60">60㎡ 이하</option>' in html
+
+
+def test_map_page(client, seeded):
+    html = client.get("/map").get_data(as_text=True)
+    assert 'id="map"' in html and 'id="ranking"' in html and "js/map.js" in html

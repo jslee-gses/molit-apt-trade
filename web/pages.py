@@ -34,6 +34,11 @@ def trends_page():
     return render_template("trends.html", p=jobs.progress(), bands=params.BANDS)
 
 
+@bp.route("/map")
+def map_page():
+    return render_template("map.html", p=jobs.progress(), bands=params.BANDS)
+
+
 @bp.route("/trades")
 def trades():
     args = request.args
