@@ -1,6 +1,8 @@
 """누락 점검: 작업별 품질 집계와 진행 상황·누락 점검 보고."""
 from psycopg.types.json import Jsonb
 
+import db
+import settings
 from collector import api
 
 # 누락 점검 대상: 위치·가격 분석에 꼭 필요한 필드
@@ -30,3 +32,24 @@ def write_quality(conn, lawd_cd, deal_ymd, q):
         "WHERE lawd_cd = %(lawd_cd)s AND deal_ymd = %(deal_ymd)s",
         {**q, "q_blank": Jsonb(q["q_blank"]), "lawd_cd": lawd_cd, "deal_ymd": deal_ymd},
     )
+
+
+def db_size(conn):
+    return conn.execute("SELECT pg_database_size(current_database()) AS n").fetchone()["n"]
+
+
+def storage_pct():
+    with db.connection() as conn:
+        return 100 * db_size(conn) / (settings.DB_LIMIT_MB * 1024 * 1024)
+
+
+def backfill_quality(conn):
+    """품질 집계 열이 비어 있는 완료 작업을 채운다(이전 버전에서 받은 자료)."""
+    todo = conn.execute(
+        "SELECT lawd_cd, deal_ymd FROM jobs WHERE status = 'done' AND q_blank IS NULL").fetchall()
+    for job in todo:
+        rows = conn.execute("SELECT * FROM trades WHERE lawd_cd = %s AND deal_ymd = %s",
+                            (job["lawd_cd"], job["deal_ymd"])).fetchall()
+        write_quality(conn, job["lawd_cd"], job["deal_ymd"],
+                      job_quality(rows, job["lawd_cd"], job["deal_ymd"]))
+    return len(todo)
