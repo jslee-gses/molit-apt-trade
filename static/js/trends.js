@@ -10,9 +10,14 @@
   };
   const state = App.readState({ regions: 'nation:00', metric: 'median_price', band: 'all', from: '', to: '', ma: '', idx: '' });
   const chart = App.chart(el('chart'));
+  let seq = 0;
   let picked = state.regions.split(',').filter(Boolean).slice(0, MAX)
     .map((key, slot) => ({ key, name: key, slot }));
   let last = null;
+
+  // 지표/면적 검증
+  if (!(state.metric in METRICS)) state.metric = 'median_price';
+  if (!el('band').querySelector(`option[value="${state.band}"]`)) state.band = 'all';
 
   // 컨트롤 초기값
   el('metric').value = state.metric;
@@ -72,25 +77,28 @@
   }
 
   async function render() {
+    const my = ++seq;
     readControls();
     App.writeState(state);
     drawChips();
     App.message(el('msg'), '');
     if (!picked.length) { chart.clear(); el('table').innerHTML = ''; return; }
-    if (state.metric === 'range' && picked.length > 1) {
-      App.message(el('msg'), '25~75% 범위는 지역을 1개만 골랐을 때 볼 수 있습니다.', 'warn');
-      chart.clear();
-      return;
-    }
     try {
       last = await App.api('/api/agg', { regions: state.regions, band: state.band, from: state.from, to: state.to });
-    } catch (e) { App.message(el('msg'), e.message); return; }
+    } catch (e) { App.message(el('msg'), e.message); chart.clear(); el('table').innerHTML = ''; return; }
+    if (my !== seq) return;
     state.from = last.from; state.to = last.to;
     el('from').value = App.toMonthInput(last.from);
     el('to').value = App.toMonthInput(last.to);
     App.writeState(state);
     for (const s of last.series) { const p = picked.find((x) => x.key === s.key); if (p) p.name = s.name; }
     drawChips();
+    if (state.metric === 'range' && picked.length > 1) {
+      App.message(el('msg'), '25~75% 범위는 지역을 1개만 골랐을 때 볼 수 있습니다.', 'warn');
+      chart.clear();
+      el('table').innerHTML = '';
+      return;
+    }
     draw();
   }
 
@@ -117,31 +125,35 @@
     if (state.metric === 'range') {
       const s = last.series[0];
       const p = picked.find((x) => x.key === s.key);
-      const color = App.seriesColor(p.slot);
-      const by = Object.fromEntries(s.points.map((pt) => [pt.ym, pt]));
-      const lo = months.map((m) => by[m]?.p25_price ?? null);
-      const hi = months.map((m) => by[m]?.p75_price ?? null);
-      series.push(
-        { name: '25%', type: 'line', data: lo, stack: 'band', symbol: 'none', lineStyle: { opacity: 0 }, silent: true },
-        { name: '25~75%', type: 'line', data: hi.map((h, i) => (h == null || lo[i] == null ? null : h - lo[i])), stack: 'band', symbol: 'none', lineStyle: { opacity: 0 }, areaStyle: { color, opacity: 0.18 }, silent: true },
-        { name: s.name, type: 'line', data: months.map((m) => by[m]?.median_price ?? null), color, symbol: 'none', lineStyle: { width: 2 } },
-      );
-      tooltip = { ...base.tooltip, formatter: (ps) => {
-        const m = months[ps[0].dataIndex];
-        const pt = by[m];
-        return pt ? `${App.fmt.ym(m)}<br>75%: ${App.fmt.eok(pt.p75_price)}<br>중위: <b>${App.fmt.eok(pt.median_price)}</b><br>25%: ${App.fmt.eok(pt.p25_price)}<br>${App.fmt.int(pt.n_trades)}건` : `${App.fmt.ym(m)}<br>거래 없음`;
-      } };
+      if (p) {
+        const color = App.seriesColor(p.slot);
+        const by = Object.fromEntries(s.points.map((pt) => [pt.ym, pt]));
+        const lo = months.map((m) => by[m]?.p25_price ?? null);
+        const hi = months.map((m) => by[m]?.p75_price ?? null);
+        series.push(
+          { name: '25%', type: 'line', data: lo, stack: 'band', symbol: 'none', lineStyle: { opacity: 0 }, silent: true },
+          { name: '25~75%', type: 'line', data: hi.map((h, i) => (h == null || lo[i] == null ? null : h - lo[i])), stack: 'band', symbol: 'none', lineStyle: { opacity: 0 }, areaStyle: { color, opacity: 0.18 }, silent: true },
+          { name: s.name, type: 'line', data: months.map((m) => by[m]?.median_price ?? null), color, symbol: 'none', lineStyle: { width: 2 } },
+        );
+        tooltip = { ...base.tooltip, formatter: (ps) => {
+          const m = months[ps[0].dataIndex];
+          const pt = by[m];
+          return pt ? `${App.fmt.ym(m)}<br>75%: ${App.fmt.eok(pt.p75_price)}<br>중위: <b>${App.fmt.eok(pt.median_price)}</b><br>25%: ${App.fmt.eok(pt.p25_price)}<br>${App.fmt.int(pt.n_trades)}건` : `${App.fmt.ym(m)}<br>거래 없음`;
+        } };
+      }
     } else {
       for (const s of last.series) {
         const p = picked.find((x) => x.key === s.key);
-        series.push({ name: s.name, type: 'line', data: valuesFor(s, months).vals, color: App.seriesColor(p.slot), symbol: 'none', lineStyle: { width: 2 }, emphasis: { focus: 'series' }, connectNulls: false });
+        if (p) series.push({ name: s.name, type: 'line', data: valuesFor(s, months).vals, color: App.seriesColor(p.slot), symbol: 'none', lineStyle: { width: 2 }, emphasis: { focus: 'series' }, connectNulls: false });
       }
     }
     if (series.length) series[series.length - 1].markArea = App.provisionalArea(last.provisional_from, last.to, last.from);
 
+    const showLegend = state.metric !== 'range' && last.series.length > 1;
     chart.setOption({
       ...base,
-      legend: { ...base.legend, show: state.metric !== 'range' && last.series.length > 1 },
+      legend: { ...base.legend, show: showLegend, type: showLegend ? 'scroll' : 'plain', top: 4 },
+      grid: { ...base.grid, top: showLegend ? 56 : base.grid?.top },
       xAxis: { ...base.xAxis, data: labels },
       yAxis: { ...base.yAxis, scale: state.metric !== 'n_trades', name: state.idx ? `${title} (시작월=100)` : title, nameTextStyle: { color: App.css('--muted') }, axisLabel: { color: App.css('--muted'), formatter: yfmt } },
       tooltip,
