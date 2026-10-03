@@ -21,6 +21,7 @@
 5. 완전 중복 행, 해제 거래 수
 6. 지오코딩·분석용 핵심 필드(지번·도로명 등)의 빈 값 비율
 7. 재수집 시 건수 변동 이력
+8. 단지 좌표 확보율, 좌표 못 찾은 단지(수동 입력), 경계 밖·근접 배정, API 시군구와 좌표 시군구 불일치
 
 ## 시군구 코드
 `lawd_codes.csv`는 법정동코드(2022.9)에 이후 개편을 반영하고 API 조회로 검증한 목록입니다.
@@ -34,6 +35,8 @@ API는 과거 자료도 새 코드로만 제공하므로 개편이 있으면 이
 | `db.py`, `migrations/` | Postgres 커넥션 풀, SQL 마이그레이션(시작할 때 자동 적용) |
 | `collector/` | 국토부 API 호출(`api`), 저장(`store`), 작업 선택·배치(`jobs`), 누락 점검(`quality`) |
 | `web/` | 화면(`pages`), JSON API(`api`), 로그인(`auth`) |
+| `geo/` | 단지 등록·좌표 연결(`complexes`, `locate`), 지역 판정(`assign`), 경계 버전(`versions`), 10분 주기 처리(`pipeline`), 로컬 도구(`address_points`, `boundaries`) |
+| `static/geo/`, `geo_data/` | 경계 버전별 화면용 GeoJSON / 판정용 폴리곤·지역 목록 |
 | `scheduler.py` | 백그라운드 수집 작업 |
 | `scripts/migrate_sqlite.py` | 옛 SQLite → Postgres 1회 이전 |
 
@@ -86,3 +89,7 @@ py -3.14 -m venv .venv
 .venv/Scripts/python -m pytest
 .venv/Scripts/python app.py        # http://localhost:8000
 ```
+
+## 지리 데이터
+좌표는 주소정보누리집 위치정보요약DB(도로명주소 매칭), 경계는 브이월드·국가공간정보포털 읍면동 SHP로 만듭니다.
+갱신 절차: `docs/runbooks/geo-data.md`
