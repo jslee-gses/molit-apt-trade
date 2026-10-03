@@ -14,6 +14,7 @@
 import argparse
 import gzip
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -180,6 +181,9 @@ def main(argv=None):
     parser.add_argument("--source", default="", help="출처 메모(meta.json에 기록)")
     args = parser.parse_args(argv)
 
+    if not re.fullmatch(r"\d{4}-\d{2}", args.version):
+        print(f"--version은 YYYY-MM 형식이어야 합니다(예: 2026-10): {args.version!r}. 서버는 이 형식의 폴더만 경계 버전으로 인식합니다.")
+        return 1
     codes_df = lawd.load_codes()
     emd = load_emd(args.shp, args.src_crs, args.encoding)
     try:

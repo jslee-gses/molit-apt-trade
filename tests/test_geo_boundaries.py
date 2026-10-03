@@ -121,3 +121,8 @@ def test_gzip_is_reproducible_and_code_map_zero_pads(tmp_path):
     m = tmp_path / "m.csv"
     m.write_text("old_emd_cd,new_emd_cd\n1111010,1114010\n", encoding="utf-8")
     assert boundaries.read_code_map(m) == {"01111010": "01114010"}
+
+
+def test_main_rejects_bad_version_before_reading(capsys):
+    assert boundaries.main(["--shp", "does-not-exist.shp", "--version", "2026-9"]) == 1
+    assert "YYYY-MM" in capsys.readouterr().out
