@@ -1,2 +1,5 @@
 -r requirements.txt
 pytest==8.*
+geopandas==1.2.*
+pyogrio==0.13.*
+pyproj==3.8.*
