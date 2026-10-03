@@ -8,7 +8,7 @@ WITH keys AS (
            road_key(t.road_nm_sgg_cd, t.road_nm_cd, t.road_nmb_cd, t.road_nm_bonbun, t.road_nm_bubun) AS k,
            COUNT(*) AS n
       FROM trades t JOIN complexes c ON c.apt_seq = t.apt_seq
-     WHERE c.geocode_status = 'pending'
+     WHERE c.geocode_status = 'pending' AND c.apt_seq IN (SELECT apt_seq FROM pending_now)
      GROUP BY 1, 2
 ), best AS (
     SELECT DISTINCT ON (keys.apt_seq) keys.apt_seq, p.lon, p.lat
@@ -23,14 +23,34 @@ UPDATE complexes c
  WHERE c.apt_seq = best.apt_seq AND c.geocode_status = 'pending'
 """
 
+# 처리 도중 수집기가 새로 등록한 pending 단지를 시도 없이 failed로 만들지 않도록, 시작 시점의 목록만 다룬다
+SNAPSHOT = """
+CREATE TEMP TABLE pending_now ON COMMIT DROP AS
+SELECT apt_seq FROM complexes WHERE geocode_status = 'pending'
+"""
+MARK_FAILED = """
+UPDATE complexes SET geocode_status = 'failed'
+ WHERE geocode_status = 'pending' AND apt_seq IN (SELECT apt_seq FROM pending_now)
+"""
+
+
+def snapshot_pending(conn):
+    """트랜잭션 안에서 호출: 지금 pending인 단지 목록을 고정한다."""
+    conn.execute(SNAPSHOT)
+
+
+def finish_snapshot(conn):
+    """snapshot_pending 이후: 고정된 목록에만 좌표를 붙이고 못 찾은 것을 failed로 만든다."""
+    ok = conn.execute(LOCATE, {"now": settings.now_ts()}).rowcount
+    failed = conn.execute(MARK_FAILED).rowcount
+    return {"ok": ok, "failed": failed}
+
 
 def locate_pending(conn):
     """→ {"ok": 좌표를 붙인 단지 수, "failed": 이번에 못 찾은 단지 수}"""
     with conn.transaction():
-        ok = conn.execute(LOCATE, {"now": settings.now_ts()}).rowcount
-        failed = conn.execute(
-            "UPDATE complexes SET geocode_status = 'failed' WHERE geocode_status = 'pending'").rowcount
-    return {"ok": ok, "failed": failed}
+        snapshot_pending(conn)
+        return finish_snapshot(conn)
 
 
 def retry_failed(conn):

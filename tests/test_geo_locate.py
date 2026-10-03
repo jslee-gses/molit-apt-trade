@@ -46,11 +46,14 @@ def test_read_points_filters_and_keeps_first_entrance(tmp_path):
         line(road_cd="111104100137", use="제2종근린생활시설"),             # 거래에 나온 키
         line(road_cd="1111041001", bon="1"),                              # 형식 오류
     ])
-    pts = address_points.read_points([p], wanted={"111104100137|0|1|0"})
+    pts, stats = address_points.read_points([p], wanted={"111104100137|0|1|0"})
     assert set(pts) == {"111104100135|0|1|0", "111104100137|0|1|0"}
     seq, x, y, name = pts["111104100135|0|1|0"]
     assert seq == 1 and name == "테스트아파트"
-    (key, lon, lat, _), = [r for r in address_points.to_lonlat(pts) if r[0] == "111104100135|0|1|0"]
+    assert stats["bad_key"] == 1 and stats["short"] == 0 and stats["apt_rows"] == 3
+    rows, dropped = address_points.to_lonlat(pts)
+    assert dropped == 0
+    (key, lon, lat, _), = [r for r in rows if r[0] == "111104100135|0|1|0"]
     assert lon == pytest.approx(126.97, abs=1e-6) and lat == pytest.approx(37.58, abs=1e-6)
 
 
@@ -108,3 +111,88 @@ def test_load_retries_failed(pg):
         result = locate.locate_pending(conn)
         b = conn.execute("SELECT * FROM complexes WHERE apt_seq = 'B'").fetchone()
     assert result["ok"] == 1 and b["geocode_status"] == "ok"
+
+
+def test_read_points_counts_skipped_lines(tmp_path):
+    cols = line().split("|")
+    cols[address_points.COLUMNS.index("x")] = "abc"
+    p = write(tmp_path, ["a|b|c", "|".join(cols), line(road_cd="1111041001")])
+    pts, stats = address_points.read_points([p], wanted=set())
+    assert pts == {}
+    assert (stats["short"], stats["bad_number"], stats["bad_key"], stats["apt_rows"]) == (1, 1, 1, 2)
+
+
+def test_to_lonlat_drops_out_of_bbox_and_nonfinite():
+    pts = {"k1": (1, *TO_UTMK.transform(126.97, 37.58), "가"),
+           "k2": (1, 0.0, 0.0, "먼곳"),
+           "k3": (1, float("inf"), float("inf"), "무한")}
+    rows, dropped = address_points.to_lonlat(pts)
+    assert [r[0] for r in rows] == ["k1"] and dropped == 2
+
+
+def test_locate_does_not_fail_complex_registered_after_snapshot(pg):
+    with pg.connection() as conn:
+        seed_trades(conn)
+        with conn.transaction():
+            locate.snapshot_pending(conn)
+            conn.execute("INSERT INTO complexes (apt_seq) VALUES ('NEW')")   # 수집기가 뒤늦게 등록
+            result = locate.finish_snapshot(conn)
+        rows = {r["apt_seq"]: r["geocode_status"] for r in conn.execute("SELECT * FROM complexes")}
+    assert result == {"ok": 0, "failed": 3}
+    assert rows["NEW"] == "pending"
+
+
+def test_load_refuses_empty_rows(pg):
+    with pg.connection() as conn:
+        address_points.load(conn, [("111104100135|0|1|0", 126.97, 37.58, "가")], "202609")
+        with pytest.raises(ValueError):
+            address_points.load(conn, [], "202610")
+        assert conn.execute("SELECT COUNT(*) AS n FROM address_points").fetchone()["n"] == 1
+
+
+def run_main(tmp_path, lines, extra=()):
+    write(tmp_path, lines)
+    return address_points.main(["--dir", str(tmp_path), "--month", "202609", *extra])
+
+
+def count_points(pg):
+    with pg.connection() as conn:
+        return conn.execute("SELECT COUNT(*) AS n FROM address_points").fetchone()["n"]
+
+
+def test_main_refuses_without_apt_rows(pg, tmp_path, capsys):
+    with pg.connection() as conn:
+        seed_trades(conn)
+        address_points.load(conn, [("111104100135|0|1|0", 126.97, 37.58, "가")], "202609")
+    assert run_main(tmp_path, [line(use="단독주택")]) == 1
+    assert "공동주택 줄이 하나도 없습니다" in capsys.readouterr().out
+    assert count_points(pg) == 1
+
+
+def test_main_refuses_when_no_rows(pg, tmp_path):
+    with pg.connection() as conn:
+        seed_trades(conn)
+        address_points.load(conn, [("111104100135|0|1|0", 126.97, 37.58, "가")], "202609")
+    assert run_main(tmp_path, [line(road_cd="1111041001")]) == 1   # 공동주택 줄은 있으나 키 오류
+    assert count_points(pg) == 1
+
+
+def test_main_loads_local(pg, tmp_path, capsys):
+    with pg.connection() as conn:
+        seed_trades(conn)
+    assert run_main(tmp_path, [line()]) == 0
+    out = capsys.readouterr().out
+    assert "대상 DB: " in out and "적재 1건" in out
+    assert count_points(pg) == 1
+
+
+def test_main_requires_yes_for_remote_host(tmp_path, monkeypatch, capsys):
+    import os
+
+    import db
+    monkeypatch.setenv("DATABASE_URL", os.environ["DATABASE_URL"])   # main()이 바꾼 값을 테스트 뒤 되돌리기 위해
+    monkeypatch.setattr(db, "connection", lambda: pytest.fail("연결을 시도하면 안 됨"))
+    url = "postgresql://user:secret@db.example.invalid:5432/prod"
+    assert run_main(tmp_path, [line()], ["--database-url", url]) == 1
+    out = capsys.readouterr().out
+    assert "db.example.invalid:5432/prod" in out and "secret" not in out and "--yes" in out
