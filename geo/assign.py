@@ -43,6 +43,7 @@ class Boundary:
         if len(hits):
             return min(self.codes[i] for i in hits), "within"
         # 경도 1도가 위도 1도보다 짧으므로 경도 기준 반경이면 후보를 빠뜨리지 않는다
+        # 가장 가까운 점은 도(degree) 공간에서 찾고 미터로 환산하므로 거리는 근사값이다(오차 몇 % 수준).
         radius_deg = NEAREST_M / (_M_PER_DEG_LON_EQ * math.cos(math.radians(lat)))
         best = None
         for i in self.tree.query(p.buffer(radius_deg)):
@@ -54,30 +55,40 @@ class Boundary:
 
 
 def assign_row(boundary, row, version):
-    umd, match = boundary.locate(row["lon"], row["lat"])
+    lon, lat = float(row["lon"]), float(row["lat"])
+    if math.isfinite(lon) and math.isfinite(lat):
+        umd, match = boundary.locate(lon, lat)
+    else:
+        umd, match = None, "none"
     sgg = umd[:5] if umd else None
     return dict(apt_seq=row["apt_seq"], umd=umd, sgg=sgg, match=match, version=version,
+                lon=row["lon"], lat=row["lat"],
                 mismatch=bool(sgg and row["api_sgg_cd"] and sgg != row["api_sgg_cd"]))
 
 
 UPDATE = """
 UPDATE complexes SET region_umd_cd = %(umd)s, region_sgg_cd = %(sgg)s, region_match = %(match)s,
        boundary_version = %(version)s, sgg_mismatch = %(mismatch)s
- WHERE apt_seq = %(apt_seq)s
+ WHERE apt_seq = %(apt_seq)s AND lon = %(lon)s AND lat = %(lat)s
+   AND geocode_status IN ('ok', 'manual')
 """
 
 
-def assign_pending(conn, version, boundary=None):
-    """좌표가 있는데 아직 이 경계 버전으로 판정하지 않은 단지를 판정한다. → 판정한 단지 수"""
+def compute_pending(conn, version, boundary=None):
+    """좌표가 있는데 아직 이 경계 버전으로 판정하지 않은 단지의 판정 결과 목록(잠금 없이 계산)."""
     rows = conn.execute("""
         SELECT apt_seq, lon, lat, api_sgg_cd FROM complexes
-         WHERE geocode_status IN ('ok', 'manual') AND boundary_version IS DISTINCT FROM %s""",
-                        (version,)).fetchall()
+         WHERE geocode_status IN ('ok', 'manual') AND lon IS NOT NULL AND lat IS NOT NULL
+           AND boundary_version IS DISTINCT FROM %s""", (version,)).fetchall()
     if not rows:
-        return 0
+        return []
     boundary = boundary or Boundary.load(version)
-    results = [assign_row(boundary, r, version) for r in rows]
-    seqs = [r["apt_seq"] for r in rows]
+    return [assign_row(boundary, r, version) for r in rows]
+
+
+def apply_results(conn, results):
+    """판정 결과를 반영한다. 계산 뒤 좌표·상태가 바뀐 단지는 건드리지 않아 다음 실행에서 다시 판정된다."""
+    seqs = [r["apt_seq"] for r in results]
     with conn.transaction():
         for hook in hooks.ON_REGION_CHANGE:   # 바뀌기 전 지역
             hook(conn, seqs)
@@ -86,3 +97,9 @@ def assign_pending(conn, version, boundary=None):
         for hook in hooks.ON_REGION_CHANGE:   # 바뀐 뒤 지역
             hook(conn, seqs)
     return len(results)
+
+
+def assign_pending(conn, version, boundary=None):
+    """→ 판정한 단지 수"""
+    results = compute_pending(conn, version, boundary)
+    return apply_results(conn, results) if results else 0
