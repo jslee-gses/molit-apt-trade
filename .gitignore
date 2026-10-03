@@ -14,3 +14,6 @@ molit_api.py
 *.prj
 *.cpg
 geo_raw/
+# 개발용 가짜 경계(scripts/seed_dev.py)
+static/geo/0000-dev/
+geo_data/0000-dev/

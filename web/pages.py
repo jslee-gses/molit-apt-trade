@@ -24,7 +24,12 @@ def count_trades(conn, args):
 
 
 @bp.route("/")
-def index():
+def dashboard():
+    return render_template("dashboard.html", p=jobs.progress())
+
+
+@bp.route("/trades")
+def trades():
     args = request.args
     where, params = filters(args)
     try:
@@ -43,7 +48,7 @@ def index():
     sido = args.get("sido", "")
     sigungu = CODES[CODES["시도"] == sido] if sido else CODES
     return render_template(
-        "index.html", rows=[api_row(r) for r in rows], total=total, page=page,
+        "trades.html", rows=[api_row(r) for r in rows], total=total, page=page,
         pages=max((total - 1) // PAGE_SIZE + 1, 1), args=args, sido_list=SIDO,
         sigungu_list=sigungu.to_dict("records"), months=[m for m in all_months if m.startswith(year)],
         p=jobs.progress(), years=sorted({m[:4] for m in all_months}, reverse=True),

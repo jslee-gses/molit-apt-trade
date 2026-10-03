@@ -23,17 +23,17 @@ def seeded(pg):
 
 
 def test_index_lists_trades(client, seeded):
-    html = client.get("/").get_data(as_text=True)
+    html = client.get("/trades").get_data(as_text=True)
     assert "종로아파트" in html and "중구아파트" in html
     assert "조건에 맞는 거래 3건" in html
 
 
 def test_index_filters(client, seeded):
-    html = client.get("/?lawd_cd=11140").get_data(as_text=True)
+    html = client.get("/trades?lawd_cd=11140").get_data(as_text=True)
     assert "중구아파트" in html and "종로아파트" not in html
-    html = client.get("/?q=종로").get_data(as_text=True)
+    html = client.get("/trades?q=종로").get_data(as_text=True)
     assert "조건에 맞는 거래 1건" in html
-    html = client.get("/?sido=서울특별시&exclude_cancelled=1").get_data(as_text=True)
+    html = client.get("/trades?sido=서울특별시&exclude_cancelled=1").get_data(as_text=True)
     assert "해제단지" not in html and "조건에 맞는 거래 2건" in html
 
 
@@ -66,10 +66,10 @@ def test_api_quality(client, seeded):
 
 
 def test_index_bad_page_is_400(client, seeded):
-    r = client.get("/?page=abc")
+    r = client.get("/trades?page=abc")
     assert r.status_code == 400
     assert "page" in r.get_data(as_text=True)
-    assert client.get("/?page=0").status_code == 200       # 1로 보정
+    assert client.get("/trades?page=0").status_code == 200       # 1로 보정
 
 
 def test_api_trades_bad_limit(client, seeded):
