@@ -106,12 +106,12 @@ def load(conn, rows, month):
     if not rows:
         raise ValueError("적재할 행이 없습니다(빈 목록으로 address_points를 비울 수 없음)")
     with conn.transaction():
+        complexes.lock_complexes(conn)   # 좌표 연결(locate)과 같은 순서: 단지 잠금 → address_points
         conn.execute("TRUNCATE address_points")
         with conn.cursor() as cur, cur.copy(
                 "COPY address_points (road_key, lon, lat, bld_nm, source_month) FROM STDIN") as copy:
             for key, lon, lat, name in rows:
                 copy.write_row([key, lon, lat, name or None, month])
-        complexes.lock_complexes(conn)
         locate.retry_failed(conn)
     return len(rows)
 
