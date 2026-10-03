@@ -1,10 +1,11 @@
 """아파트 매매 실거래가를 자동 수집·최신화하고 분석하는 웹앱."""
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from flask import Flask
 from flask.json.provider import DefaultJSONProvider
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 import db
 import settings
@@ -28,15 +29,24 @@ class JSONProvider(DefaultJSONProvider):
 
 
 def create_app():
-    from web import api, pages
+    from web import api, auth, pages
     from web.common import register_filters
 
     flask_app = Flask(__name__)
     flask_app.secret_key = settings.require("SECRET_KEY")
+    flask_app.config.update(
+        PERMANENT_SESSION_LIFETIME=timedelta(days=30),
+        SESSION_COOKIE_SAMESITE="Lax",
+        SESSION_COOKIE_SECURE=bool(settings.env("RAILWAY_ENVIRONMENT")),  # Railway(HTTPS)에서만
+    )
+    # Railway 프록시 뒤: 실제 클라이언트 IP·https를 반영(시도 제한·보안 쿠키용)
+    flask_app.wsgi_app = ProxyFix(flask_app.wsgi_app, x_for=1, x_proto=1)
     flask_app.json = JSONProvider(flask_app)
     db.migrate()
+    flask_app.register_blueprint(auth.bp)
     flask_app.register_blueprint(pages.bp)
     flask_app.register_blueprint(api.bp)
+    auth.protect(flask_app)
     register_filters(flask_app)
     return flask_app
 

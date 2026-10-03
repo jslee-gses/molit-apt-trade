@@ -50,6 +50,7 @@
     <h1>아파트 매매 실거래가</h1>
     <a href="/" class="{{ 'on' if request.path == '/' }}">거래 목록</a>
     <a href="/status" class="{{ 'on' if request.path == '/status' }}">수집 현황·누락 점검</a>
+    {% if session.get('auth') %}<form method="post" action="/logout" style="margin-left:auto"><button>로그아웃</button></form>{% endif %}
   </nav>
   {% if p is defined %}
   <div class="meta">

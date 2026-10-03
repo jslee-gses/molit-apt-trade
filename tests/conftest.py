@@ -37,6 +37,8 @@ def pg():
 @pytest.fixture
 def app(pg):
     import app as app_module
+    from web import auth
+    auth.reset()
     flask_app = app_module.create_app()
     flask_app.config.update(TESTING=True)
     return flask_app
