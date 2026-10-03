@@ -107,3 +107,11 @@ def test_codebook_covers_raw_columns(client):
     assert {c[1] for c in export.RAW_COLUMNS} <= names
     assert {c[1] for c in export.AGG_COLUMNS} <= names
     assert set(api.FIELDS) <= names
+
+
+def test_legacy_download_with_search(client, seeded):
+    resp = client.get("/download.csv?lawd_cd=11110&year=2026&q=신교")
+    assert resp.status_code == 301
+    rows = read_csv(client.get(resp.headers["Location"]))
+    assert len(rows) == 17                                      # 9 * 2 - 1 해제 제외
+    assert {r["aptSeq"] for r in rows} == {"B"}                # 신교동 단지는 B만

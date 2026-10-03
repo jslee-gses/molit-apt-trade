@@ -1,6 +1,7 @@
 """데이터 추출: 원본 거래·월별 집계를 CSV(utf-8-sig)·Parquet로 흘려보낸다(서버 측 커서, 메모리 일정)."""
 import csv
 import io
+import logging
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -8,6 +9,8 @@ import pyarrow.parquet as pq
 import db
 from analytics import params, queries
 from collector import api, codes
+
+log = logging.getLogger(__name__)
 
 MAX_RAW_MONTHS = 60
 BATCH = 5000
@@ -89,8 +92,9 @@ def parse_args(args):
     ym_from, ym_to = params.ym_range(rng, default_months=12,
                                      max_months=MAX_RAW_MONTHS if target == "raw" else None)
     band = params.choice(args.get("band"), [b for b, _ in params.BANDS], "면적 구간", "all")
+    q = (args.get("q") or "").strip() or None
     return dict(target=target, region=region, ym_from=ym_from, ym_to=ym_to, band=band,
-                include_cancelled=args.get("cancelled") in ("1", "true", "on"))
+                include_cancelled=args.get("cancelled") in ("1", "true", "on"), q=q)
 
 
 def raw_query(p):
@@ -108,6 +112,9 @@ def raw_query(p):
     if p["band"] != "all":
         where.append({"le60": "t.exclu_use_ar <= 60", "60_85": "t.exclu_use_ar > 60 AND t.exclu_use_ar <= 85",
                       "gt85": "t.exclu_use_ar > 85"}[p["band"]])
+    if p.get("q"):
+        where.append("(t.apt_nm ILIKE %s OR t.umd_nm ILIKE %s OR t.road_nm ILIKE %s)")
+        args.extend([f"%{p['q']}%"] * 3)
     cols = ", ".join(f"{expr} AS \"{name}\"" for expr, name, _ in RAW_COLUMNS)
     sql = (f"SELECT {cols} FROM trades t LEFT JOIN complexes c ON c.apt_seq = btrim(t.apt_seq) "
            f"WHERE {' AND '.join(where)} ORDER BY t.deal_date, t.lawd_cd, t.id")
@@ -131,9 +138,13 @@ def agg_query(version, p):
 
 def _rows(sql, args):
     with db.connection() as conn, conn.transaction(), conn.cursor(name="export") as cur:
-        cur.execute(sql, args)
-        while batch := cur.fetchmany(BATCH):
-            yield batch
+        try:
+            cur.execute(sql, args)
+            while batch := cur.fetchmany(BATCH):
+                yield batch
+        except Exception:
+            log.exception("추출 중 오류")
+            raise
 
 
 def _cell(v):

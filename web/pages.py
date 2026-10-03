@@ -1,4 +1,6 @@
 ﻿"""화면: 거래 목록, 수집 현황."""
+from urllib.parse import urlencode
+
 from flask import Blueprint, redirect, render_template, request, url_for
 
 import db
@@ -63,4 +65,4 @@ def status():
 @bp.route("/download.csv")
 def download():
     """옛 주소: 같은 조건으로 /export.csv(원본)로 보낸다."""
-    return redirect(url_for("export.export_csv", **{**request.args.to_dict(), "target": "raw"}), code=301)
+    return redirect(url_for("export.export_csv") + "?" + urlencode({**request.args.to_dict(), "target": "raw"}), code=301)
