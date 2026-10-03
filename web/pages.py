@@ -88,7 +88,12 @@ def status():
 @bp.route("/download.csv")
 def download():
     """옛 주소: 같은 조건으로 /export.csv(원본)로 보낸다."""
-    return redirect(url_for("export.export_csv") + "?" + urlencode({**request.args.to_dict(), "target": "raw"}), code=301)
+    # 옛 다운로드는 exclude_cancelled가 없으면 해제 거래도 포함했다
+    args = request.args.to_dict()
+    if not args.pop("exclude_cancelled", None):
+        args["cancelled"] = "1"
+    args["target"] = "raw"
+    return redirect(url_for("export.export_csv") + "?" + urlencode(args), code=302)
 
 
 @bp.route("/complexes")

@@ -142,7 +142,7 @@ def summary(conn, version):
          WHERE boundary_version = %s AND level = 'nation' AND size_band = 'all' AND ym BETWEEN %s AND %s""",
                                             (version, shift_ym(first, -12), now))}
     cur, prev = nat.get(conf), nat.get(shift_ym(conf, -12))
-    kpi = dict(ym=conf, n=cur["n_trades"] if cur else 0, median=cur["median_price"] if cur else None,
+    kpi = dict(ym=conf, n=cur["n_trades"] if cur else None, median=cur["median_price"] if cur else None,
                yoy_n=_pct(cur["n_trades"] if cur else None, prev["n_trades"] if prev else None),
                yoy_median=_pct(cur["median_price"] if cur else None, prev["median_price"] if prev else None))
     series_ = [dict(ym=ym, n=nat[ym]["n_trades"] if ym in nat else None,

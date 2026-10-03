@@ -17,7 +17,7 @@
 
   // 지표/면적 검증
   if (!(state.metric in METRICS)) state.metric = 'median_price';
-  if (!el('band').querySelector(`option[value="${state.band}"]`)) state.band = 'all';
+  if (![...el('band').options].some((o) => o.value === state.band)) state.band = 'all';
 
   // 컨트롤 초기값
   el('metric').value = state.metric;

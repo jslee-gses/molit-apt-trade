@@ -19,7 +19,7 @@
 
   // 지표/면적 검증
   if (!(state.metric in METRICS)) state.metric = 'median_price';
-  if (!el('band').querySelector(`option[value="${state.band}"]`)) state.band = 'all';
+  if (![...el('band').options].some((o) => o.value === state.band)) state.band = 'all';
   if (!['sido', 'sgg', 'umd'].includes(state.level)) { state.level = 'sido'; state.parent = ''; }
 
   el('metric').value = state.metric;

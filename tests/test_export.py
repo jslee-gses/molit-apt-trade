@@ -90,10 +90,12 @@ def test_export_bad_region(client, seeded):
 
 def test_legacy_download_redirects(client, seeded):
     resp = client.get("/download.csv?lawd_cd=11110&year=2026")
-    assert resp.status_code == 301
+    assert resp.status_code == 302
     assert resp.headers["Location"].startswith("/export.csv?")
     rows = read_csv(client.get(resp.headers["Location"]))
-    assert len(rows) == 9 * 5 - 1                        # 2026-01~09, 해제 1건 제외
+    assert len(rows) == 9 * 5                            # 2026-01~09, 해제 1건 포함(옛 동작)
+    resp = client.get("/download.csv?lawd_cd=11110&year=2026&exclude_cancelled=1")
+    assert len(read_csv(client.get(resp.headers["Location"]))) == 9 * 5 - 1
 
 
 def test_legacy_sido_name(client, seeded):
@@ -111,7 +113,7 @@ def test_codebook_covers_raw_columns(client):
 
 def test_legacy_download_with_search(client, seeded):
     resp = client.get("/download.csv?lawd_cd=11110&year=2026&q=신교")
-    assert resp.status_code == 301
+    assert resp.status_code == 302
     rows = read_csv(client.get(resp.headers["Location"]))
-    assert len(rows) == 17                                      # 9 * 2 - 1 해제 제외
+    assert len(rows) == 18                                      # 9 * 2, 해제 1건(B) 포함
     assert {r["aptSeq"] for r in rows} == {"B"}                # 신교동 단지는 B만

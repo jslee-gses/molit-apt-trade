@@ -6,9 +6,13 @@
   (읍면동 집계에서는 빠진다).
 - 수집 저장·지역 변경이 생긴 계약월은 agg_dirty에 표시하고, 지리 처리(10분 주기) 끝에 다시 계산한다.
 """
+import logging
+
 import settings
 from collector import api
 from geo import versions
+
+log = logging.getLogger(__name__)
 
 MAPPINGS = {
     "live": "SELECT apt_seq, region_sgg_cd AS sgg, region_umd_cd AS umd FROM complexes",
@@ -104,13 +108,18 @@ def refresh_dirty(conn):
         # 이 버전 집계가 아직 없다(이미 활성인 경계가 있는 채로 배포한 경우): 거래가 있는 모든 달을 대기열에
         mark_months(conn, [r["deal_ymd"] for r in conn.execute(
             "SELECT DISTINCT deal_ymd FROM jobs WHERE stored_count > 0")])
-    todo = conn.execute("SELECT ym, marked_at FROM agg_dirty ORDER BY ym").fetchall()
+    todo = conn.execute("SELECT ym, marked_at FROM agg_dirty ORDER BY ym DESC").fetchall()
+    done = 0
     for row in todo:
-        with conn.transaction():
-            refresh_month(conn, row["ym"], version)
-            # 계산 도중 새로 표시된 달은 남겨 둔다
-            conn.execute("DELETE FROM agg_dirty WHERE ym = %s AND marked_at <= %s", (row["ym"], row["marked_at"]))
-    return len(todo)
+        try:
+            with conn.transaction():
+                refresh_month(conn, row["ym"], version)
+                # 계산 도중 새로 표시된 달은 남겨 둔다
+                conn.execute("DELETE FROM agg_dirty WHERE ym = %s AND marked_at <= %s", (row["ym"], row["marked_at"]))
+            done += 1
+        except Exception:
+            log.exception("%s 집계 갱신 실패: 대기열에 남기고 다음 실행에서 다시 시도합니다", row["ym"])
+    return done
 
 
 def rebuild_all(conn, version, mapping):

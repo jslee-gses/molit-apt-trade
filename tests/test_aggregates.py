@@ -129,6 +129,23 @@ def test_hooks_mark_and_refresh_dirty(pg, monkeypatch):
         assert [r["ym"] for r in conn.execute("SELECT ym FROM agg_dirty")] == ["202601"]
 
 
+def test_refresh_dirty_isolates_failures_newest_first(pg, monkeypatch):
+    calls = []
+
+    def fake(conn, ym, version, mapping="live"):
+        calls.append(ym)
+        if ym == "202601":
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(aggregates, "refresh_month", fake)
+    with pg.connection() as conn:
+        seed(conn)
+        aggregates.mark_months(conn, ["202601", "202512"])
+        assert aggregates.refresh_dirty(conn) == 1
+        assert calls == ["202601", "202512"]                 # 최신 달 먼저
+        assert [r["ym"] for r in conn.execute("SELECT ym FROM agg_dirty")] == ["202601"]
+
+
 def test_refresh_dirty_waits_for_active_version(pg):
     with pg.connection() as conn:
         seed(conn)

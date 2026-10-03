@@ -40,7 +40,7 @@
     series: [{ name: '중위 거래가', type: 'line', data: series.map((s) => s.median), color, symbol: 'none', lineStyle: { width: 2 }, markArea: prov }],
   });
 
-  el('mover-note').textContent = `(${App.fmt.ym(movers.window[0])}~${App.fmt.ym(movers.window[1])} vs 전년 같은 기간, 두 기간 모두 ${movers.min_trades}건 이상)`;
+  el('mover-note').textContent = `(${App.fmt.ym(movers.window[0])}~${App.fmt.ym(movers.window[1])} vs 전년 같은 기간, 두 기간 모두 ${movers.min_trades}건 이상) · 중위가는 월별 중위가의 거래량 가중평균`;
   const table = (rows, title) => `<thead><tr><th>${title}</th><th class="num">전년 대비</th><th class="num">중위가</th><th class="num">거래</th></tr></thead><tbody>${
     rows.length ? rows.map((m) => `<tr><td><a href="/trends?regions=sgg:${m.region_cd}">${App.escapeHtml(m.name)}</a></td><td class="num">${App.fmt.pct(m.yoy)}</td><td class="num">${App.fmt.eok(m.median)}</td><td class="num">${App.fmt.int(m.n)}</td></tr>`).join('')
       : '<tr><td colspan="4" class="muted">해당 시군구 없음</td></tr>'}</tbody>`;
