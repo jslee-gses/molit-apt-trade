@@ -40,3 +40,19 @@ def test_trends_page(client, seeded):
 def test_map_page(client, seeded):
     html = client.get("/map").get_data(as_text=True)
     assert 'id="map"' in html and 'id="ranking"' in html and "js/map.js" in html
+
+
+def test_complexes_search_page(client, seeded):
+    html = client.get("/complexes?q=청운").get_data(as_text=True)
+    assert "청운아파트" in html and 'href="/complexes/A"' in html and "무교타워" not in html
+
+
+def test_complexes_bad_region(client, seeded):
+    html = client.get("/complexes?region=1").get_data(as_text=True)
+    assert "지역 코드는" in html
+
+
+def test_complex_page(client, seeded):
+    html = client.get("/complexes/A").get_data(as_text=True)
+    assert "청운아파트" in html and "서울특별시 종로구 청운동" in html and 'id="scatter"' in html
+    assert client.get("/complexes/ZZZ").status_code == 404

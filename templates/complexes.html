@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}단지 · 아파트 실거래가{% endblock %}
+{% block body %}
+<form class="bar" method="get">
+  <input type="text" name="q" value="{{ q }}" placeholder="단지명">
+  <input type="text" name="region" value="{{ region }}" placeholder="지역 코드(시도 2·시군구 5·읍면동 8자리)" style="flex:0 1 260px">
+  <button class="primary">검색</button>
+</form>
+{% if error %}<p class="err">{{ error }}</p>{% endif %}
+<div class="wrap"><table>
+  <thead><tr><th>단지</th><th>지역(최신 경계)</th><th>법정동(신고)</th><th class="num">건축년도</th><th>최근 계약일</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr><td><a href="/complexes/{{ r.apt_seq|urlencode }}">{{ r.apt_nm or r.apt_seq }}</a></td>
+      <td>{{ r.region_name or '' }}</td><td>{{ r.api_umd_nm or '' }}</td>
+      <td class="num">{{ r.build_year or '' }}</td><td>{{ r.last_deal_date or '' }}</td></tr>
+  {% else %}
+    <tr><td colspan="5" class="muted">검색 결과가 없습니다.</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+<p class="meta">최근 거래 순 최대 50개</p>
+{% endblock %}

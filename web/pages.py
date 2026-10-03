@@ -1,11 +1,12 @@
 """화면: 거래 목록, 수집 현황."""
 from urllib.parse import urlencode
 
-from flask import Blueprint, redirect, render_template, request, url_for
+from flask import Blueprint, abort, redirect, render_template, request, url_for
 
 import db
 import settings
-from analytics import params
+from analytics import params, queries
+from analytics.params import BadParam
 from collector import jobs, quality
 from geo import complexes, pipeline
 from web.common import CODES, SIDO, api_row, filters
@@ -82,3 +83,28 @@ def status():
 def download():
     """옛 주소: 같은 조건으로 /export.csv(원본)로 보낸다."""
     return redirect(url_for("export.export_csv") + "?" + urlencode({**request.args.to_dict(), "target": "raw"}), code=301)
+
+
+@bp.route("/complexes")
+def complexes_page():
+    q, region = request.args.get("q", "").strip(), request.args.get("region", "").strip()
+    rows, error = [], None
+    try:
+        with db.connection() as conn:
+            version = queries.active_version(conn)
+            rows = queries.search_complexes(conn, version, q or None, region or None)
+    except (BadParam, queries.NotReady) as e:
+        error = str(e)
+    return render_template("complexes.html", p=jobs.progress(), rows=rows, q=q, region=region, error=error)
+
+
+@bp.route("/complexes/<apt_seq>")
+def complex_page(apt_seq):
+    try:
+        with db.connection() as conn:
+            detail = queries.complex_detail(conn, queries.active_version(conn), apt_seq)
+    except queries.NotReady:
+        abort(503)
+    except LookupError:
+        abort(404)
+    return render_template("complex.html", p=jobs.progress(), c=detail["complex"], trades=detail["trades"][:200])
