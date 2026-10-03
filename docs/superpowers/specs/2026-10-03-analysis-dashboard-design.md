@@ -1,7 +1,7 @@
 # 분석 대시보드 설계 (하위 프로젝트 ①)
 
 - 작성일: 2026-10-03
-- 상태: 승인 대기 (설계 섹션 ①~⑤는 대화에서 승인됨)
+- 상태: 승인됨 (2026-10-03 개정: 좌표 출처를 VWorld 지오코더에서 주소정보누리집 위치정보요약DB로 변경)
 - 범위: molit-apt-trade를 연구·분석용 대시보드로 확장. SQLite → Postgres 이전 포함
 
 ## 1. 배경과 목표
@@ -34,7 +34,8 @@
 
 ### 1.4 유지하는 원칙
 - 데이터는 공공데이터포털 Open API로만 받는다(rt.molit.go.kr 크롤링 금지).
-- 인증키(`MOLIT_SERVICE_KEY`, `VWORLD_KEY`)는 저장소에 올리지 않는다. 로컬은 `.env`, Railway는 Variables에 둔다.
+- 인증키·비밀번호(`MOLIT_SERVICE_KEY`, `APP_PASSWORD`, `SECRET_KEY`)는 저장소에 올리지 않는다. 로컬은 `.env`, Railway는 Variables에 둔다.
+- 결과 저장을 금지하는 외부 API(VWorld 지오코더, 카카오 로컬 등)로 만든 좌표는 저장하지 않는다. 좌표는 저장·재사용이 허용된 공개 파일(주소정보누리집 위치정보요약DB)에서만 얻는다.
 
 ## 2. 플랫폼
 
@@ -72,8 +73,9 @@ collector/
   jobs.py               # 작업 생성·선택, 할당량, 재시도, 재확인 주기 (기존 로직 이식)
   quality.py            # 누락 점검 (기존 job_quality/quality_report 이식)
 geo/
-  geocode.py            # VWorld 지오코딩 (pending 단지만)
-  boundaries.py         # [로컬 수동 실행] 법정동 경계 수집·변환·단순화 → GeoJSON, 시군구 dissolve
+  address_points.py     # [로컬 수동 실행] 위치정보요약DB 파일 → 공동주택 도로명주소 좌표를 address_points에 적재
+  locate.py             # pending 단지에 address_points 좌표 연결 (SQL, API 호출 없음)
+  boundaries.py         # [로컬 수동 실행] 읍면동 경계 SHP → 변환·단순화 → GeoJSON, 시군구·시도 dissolve
   assign.py             # 단지 좌표 × 최신 법정동 폴리곤 → 지역 판정 (shapely STRtree)
 analytics/
   aggregates.py         # agg_month 증분·전체 계산
@@ -119,7 +121,7 @@ requirements-dev.txt    # 로컬 전용: pytest, geopandas, pyproj
 - `jobs`: `lawd_cd`, `deal_ymd`, `status`, `total_count`, `stored_count`, `fetched_at`, `checked_at`, `attempts`, `next_try_at`, `error`, `q_blank`, `q_dup`, `q_ymd_bad`, `q_sgg_bad`, `q_cancelled`
 - `api_usage`: `day`, `calls`
 - `changes`: `at`, `lawd_cd`, `deal_ymd`, `before`, `after`
-- `geocode_usage`: `day`, `calls` (VWorld 일일 호출 수)
+- `address_points`: `road_key`(도로명코드 12자리 + 지하여부 + 건물본번 + 건물부번) PK, `lon`, `lat`, `bld_nm`, `source_month`. 위치정보요약DB 중 건물용도가 공동주택인 출입구만 적재한다(건물마다 출입구 일련번호가 가장 작은 것).
 
 ### 4.3 `complexes` (단지·지역 대응)
 | 컬럼 | 설명 |
@@ -129,9 +131,9 @@ requirements-dev.txt    # 로컬 전용: pytest, geopandas, pyproj
 | `api_sgg_cd`, `api_umd_cd`, `api_umd_nm` | API 원본 코드 |
 | `lon`, `lat` | WGS84 좌표 |
 | `geocode_status` | `pending` / `ok` / `failed` / `manual` |
-| `geocode_source` | `parcel`(지번) / `road`(도로명) / `search`(검색 API) / `manual` |
-| `geocode_attempts`, `geocoded_at` | 시도 횟수, 시각 |
-| `region_sgg_cd`, `region_umd_cd` | 최신 경계 기준으로 판정한 시군구(5자리)·법정동(10자리) |
+| `geocode_source` | `road`(위치정보요약DB 도로명주소 매칭) / `manual` |
+| `geocoded_at` | 좌표를 정한 시각 |
+| `region_sgg_cd`, `region_umd_cd` | 최신 경계 기준으로 판정한 시군구(5자리)·읍면동(8자리: 시군구 5 + 읍면동 3. 리 단위는 읍·면으로 묶는다) |
 | `region_match` | `within` / `nearest` / `none` |
 | `boundary_version` | 판정에 쓴 경계 버전 |
 | `sgg_mismatch` | `api_sgg_cd` ≠ `region_sgg_cd` |
@@ -164,10 +166,9 @@ requirements-dev.txt    # 로컬 전용: pytest, geopandas, pyproj
 1. **수집 (06:00 KST 시작)**: 기존 로직(최근 3개월 재수집 → 재확인 → 과거 자료, 하루 한도까지)을 그대로 쓴다. 작업 하나를 저장할 때마다 다음을 한다.
    - 처음 보는 `apt_seq`를 `complexes`에 `pending`으로 등록하고, 기존 단지는 최근 정보로 갱신한다.
    - 해당 `(lawd_cd, deal_ymd)`를 `agg_dirty`에 추가한다.
-2. **좌표 변환 (10분마다)**: `pending` 단지를 일정 개수씩 VWorld 지오코더로 변환한다.
-   - 순서는 지번 주소(PARCEL) → 도로명(ROAD) → 검색 API(시군구명 + 단지명)다.
-   - `geocode_usage`로 일일 한도를 관리하고, 한도에 닿으면 다음 날까지 멈춘다.
-   - 3회 실패하면 `failed`로 둔다.
+2. **좌표 연결 (10분마다)**: `pending` 단지의 거래들에 있는 도로명주소 키(`road_nm_sgg_cd`+`road_nm_cd`, `road_nmb_cd`, `road_nm_bonbun`, `road_nm_bubun`)를 `address_points`와 맞대어 좌표를 정한다(SQL 한 번, API 호출 없음).
+   - 키가 여러 개 맞으면 가장 많은 거래가 가진 키를 쓴다.
+   - 맞는 키가 없으면 `failed`로 둔다. `address_points`를 새로 적재하면 `failed` 단지를 다시 `pending`으로 돌려 재시도한다.
 3. **지역 판정 (좌표가 생긴 직후)**: 해당 시도의 활성 버전 법정동 폴리곤을 STRtree로 만들어(시도별로 메모리 캐시) 포함 여부를 판정한다.
    - 포함되는 폴리곤이 없으면 200m 안의 가장 가까운 폴리곤에 배정하고 `nearest`로 표시한다. 그보다 멀면 `none`이다.
    - 판정된 단지의 거래가 있는 `(sgg, ym)`을 `agg_dirty`에 추가한다.
@@ -176,13 +177,14 @@ requirements-dev.txt    # 로컬 전용: pytest, geopandas, pyproj
    - 성공하면 dirty 행을 지운다.
 
 ### 5.2 최초 구축 (이전 직후)
-- 전체 단지 좌표 변환은 지오코더 일일 한도 안에서 1~2일이 걸릴 것으로 예상한다.
+- 위치정보요약DB를 처음 적재한 뒤, 전체 단지 좌표 연결은 SQL 몇 번으로 끝난다(수 분).
 - 단지마다 판정이 끝나는 대로 증분 집계가 반영된다.
 - 전부 끝나면 전체 집계를 한 번 다시 계산하고, 증분 결과와 대조해 검증한다.
 
 ### 5.3 경계 갱신 (수동, 분기나 반기마다)
 1. 로컬에서 `python -m geo.boundaries --version YYYY-MM`을 실행한다.
-   - VWorld 2D데이터 API로 최신 법정동 경계를 받는다(레이어명은 구현할 때 확인).
+   - 브이월드·국가공간정보포털에서 내려받은 최신 읍면동 경계 SHP(`LT_C_ADEMD_INFO`, 속성 `emd_cd` 8자리)를 읽는다.
+   - 경계 코드가 `lawd_codes.csv`에 없으면 `geo/code_map.csv`(옛 읍면동 코드 → 새 코드)로 바꾸고, 그래도 없으면 목록을 출력하고 중단한다.
    - EPSG:4326으로 변환하고 단순화한 뒤, `lawd_codes.csv` 기준으로 시군구·시도를 합친다.
    - GeoJSON과 `regions` 시드 파일을 생성한다.
 2. 커밋하고 배포한다. 서버가 새 버전을 `is_active=false`로 등록한다.
@@ -240,8 +242,8 @@ requirements-dev.txt    # 로컬 전용: pytest, geopandas, pyproj
 |---|---|---|
 | 수집 | API 한도·오류 | 기존과 같음(다음 날 06:00까지 대기, 지수 백오프) |
 | 수집 | DB 연결 끊김 | 풀이 재연결. 작업 저장은 한 트랜잭션이라 부분 저장 없음 |
-| 좌표 변환 | VWorld 한도·오류 | 그날 좌표 변환만 중단하고 다음 날 재개. 3회 실패하면 `failed` |
-| 좌표 변환 | 끝내 실패 | `/status`에서 수동 입력. `manual`은 자동 처리가 덮어쓰지 않음 |
+| 좌표 연결 | 도로명주소 키가 없거나 `address_points`에 없음 | `failed`. 위치정보요약DB를 새로 적재하면 재시도 |
+| 좌표 연결 | 끝내 실패 | `/status`에서 수동 입력. `manual`은 자동 처리가 덮어쓰지 않음 |
 | 지역 판정 | 폴리곤 밖 | 200m 이내면 `nearest`, 아니면 `none` |
 | 집계 | 실패 | `(sgg, ym)` 단위 트랜잭션. dirty에 남겨 재시도, 로그 기록 |
 | 경계 전환 | 재계산 실패 | 전환하지 않음. 이전 버전 유지 |
@@ -254,7 +256,8 @@ pytest를 쓰고 TDD로 진행한다.
 - **단위**:
   - 실제 API 응답 XML 샘플을 파싱한다.
   - 작업 선택, 재확인 주기, 누락 점검 규칙을 검증한다.
-  - 좌표 변환 단계별 대체 순서를 확인한다(HTTP 모의).
+  - 위치정보요약DB 행 파싱·필터·좌표계 변환(EPSG:5179 → 4326)을 작은 샘플 파일로 확인한다.
+  - 좌표 연결 SQL이 거래가 가장 많은 키를 고르고, `manual`을 덮어쓰지 않는지 확인한다.
   - 지역 판정의 내부·경계·200m 이내·미배정 경우를 작은 테스트 폴리곤으로 확인한다.
 - **DB** (docker compose Postgres):
   - 집계 SQL 결과가 같은 데이터로 pandas에서 계산한 중위값·백분위와 일치한다.
@@ -270,16 +273,15 @@ pytest를 쓰고 TDD로 진행한다.
 3. Railway에서 `python scripts/migrate_sqlite.py`를 한 번 실행한다.
    - 볼륨의 `trades.db`를 Postgres로 복사한다(`trades`, `jobs`, `api_usage`, `changes`).
    - 작업별 건수가 원본과 같은지 검증한다.
-4. `COLLECT_ENABLED=true`로 바꾼다. 좌표 변환과 집계가 자동으로 시작된다.
-5. 1주일 동안 안정적으로 돌면 SQLite 백업을 내려받고 볼륨을 제거한다. 그 전까지는 이전 태그로 롤백할 수 있다.
+4. 로컬에서 위치정보요약DB와 경계를 적재한다(`geo.address_points`, `geo.boundaries`).
+5. `COLLECT_ENABLED=true`로 바꾼다. 좌표 연결과 집계가 자동으로 시작된다.
+6. 1주일 동안 안정적으로 돌면 SQLite 백업을 내려받고 볼륨을 제거한다. 그 전까지는 이전 태그로 롤백할 수 있다.
 
 ## 11. 환경변수 (추가·변경)
 
 | 이름 | 기본값 | 설명 |
 |---|---|---|
 | `DATABASE_URL` | (필수) | Postgres 연결 문자열 |
-| `VWORLD_KEY` | (필수) | VWorld 인증키(지오코더·검색·2D데이터 API) |
-| `GEOCODE_DAILY_LIMIT` | `30000` | VWorld 일일 호출 상한(발급 한도보다 낮게, 구현할 때 확인) |
 | `APP_PASSWORD` | (필수) | 공유 로그인 비밀번호 |
 | `SECRET_KEY` | (필수) | 세션 서명 키 |
 | `COLLECT_ENABLED` | `true` | 수집 스케줄러 사용 여부 |
@@ -288,10 +290,15 @@ pytest를 쓰고 TDD로 진행한다.
 
 기존 `MOLIT_SERVICE_KEY`, `START_YMD`, `DAILY_LIMIT`, `REQUEST_INTERVAL`, `REFRESH_AT`, `STORAGE_STOP_PCT` 등은 유지한다.
 
-## 12. 범위 밖 (이번에 하지 않음)
+## 12. 갱신 주기 요약
+- 위치정보요약DB: 월 1회 로컬에서 `python -m geo.address_points --dir <압축 푼 폴더>` 실행(운영 DB의 공개 연결 문자열 사용)
+- 경계: 분기·반기 1회 `python -m geo.boundaries` 실행 후 커밋·배포
+
+## 13. 범위 밖 (이번에 하지 않음)
 - 운영 알림(이메일·메신저), 개편 자동 감지·재수집 → ②
 - 학생용 공개 범위, 실습 데이터셋 → ③
 - 다중 사용자 계정·권한, 외부 서비스
 - 전월세·오피스텔 등 다른 데이터셋
-- PostGIS, 배경지도 위 단지 위치 표시
+- PostGIS, 배경지도 위 단지 위치 표시(필요하면 카카오·VWorld 지도를 브라우저에서 실시간 호출하는 방식으로, 좌표 저장 없이)
+- 지번 주소 기반 좌표 매칭(위치정보요약DB에는 지번이 없음)
 - 수집기 별도 worker 서비스 분리
