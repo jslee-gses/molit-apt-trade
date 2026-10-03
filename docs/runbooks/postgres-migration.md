@@ -26,8 +26,11 @@
 ## 3. 데이터 이전
 ```bash
 railway ssh --service web
-python scripts/migrate_sqlite.py --sqlite /data/trades.db
+nohup python scripts/migrate_sqlite.py --sqlite /data/trades.db > /data/migrate.log 2>&1 &
+tail -f /data/migrate.log
 ```
+SSH 연결이 끊겨도 이전이 중단되지 않도록 백그라운드로 실행하고, 로그 파일로 진행을 본다(`tail -f`는 Ctrl+C로 빠져나와도 이전은 계속된다).
+복사 중 데이터베이스 형식 오류로 실패하면 전체 복사가 롤백된 것이므로 그대로 다시 실행해도 안전하다.
 스크립트는 trades·jobs·api_usage·changes를 한 트랜잭션으로 복사한 뒤, 표별 건수와 (지역, 계약월)별 거래 건수를 원본과 비교한다. 하나라도 다르면 `검증 실패`를 출력하고 종료 코드 1을 돌려준다.
 - Postgres의 네 표 중 하나라도 비어 있지 않으면 중단한다. 다시 옮기려면 `--replace`를 붙인다(주의: Postgres의 네 표를 모두 지우고 다시 복사).
 - 작업별 `stored_count`와 실제 건수가 다른 경우는 `경고`로만 출력된다(원본 자체의 불일치이며 복사 오류가 아니다).

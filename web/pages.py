@@ -27,7 +27,10 @@ def count_trades(conn, args):
 def index():
     args = request.args
     where, params = filters(args)
-    page = max(int(args.get("page", 1) or 1), 1)
+    try:
+        page = max(int(args.get("page", 1) or 1), 1)
+    except ValueError:
+        return "page는 숫자여야 합니다.", 400
     with db.connection() as conn:
         total = count_trades(conn, args)
         rows = conn.execute(

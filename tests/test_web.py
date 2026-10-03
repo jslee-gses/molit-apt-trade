@@ -79,3 +79,18 @@ def test_api_status_formats_datetime(client, seeded):
 def test_api_quality(client, seeded):
     data = client.get("/api/quality").get_json()
     assert data["cancelled"] == 1
+
+
+def test_index_bad_page_is_400(client, seeded):
+    r = client.get("/?page=abc")
+    assert r.status_code == 400
+    assert "page" in r.get_data(as_text=True)
+    assert client.get("/?page=0").status_code == 200       # 1로 보정
+
+
+def test_api_trades_bad_limit(client, seeded):
+    r = client.get("/api/trades?limit=abc")
+    assert r.status_code == 400 and "error" in r.get_json()
+    assert client.get("/api/trades?limit=0").status_code == 400
+    assert client.get("/api/trades?limit=-5").status_code == 400
+    assert len(client.get("/api/trades?limit=1").get_json()) == 1

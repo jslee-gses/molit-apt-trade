@@ -2,6 +2,7 @@
 
 DB는 모른다. 호출 수 기록·한도 확인은 호출하는 쪽이 on_call 콜백으로 맡긴다.
 """
+import math
 import re
 import time
 import xml.etree.ElementTree as ET
@@ -55,13 +56,20 @@ def to_int(value):
         return None
 
 
+def to_smallint(value):
+    """정수로 바꾸되 Postgres SMALLINT 범위를 벗어나면 None."""
+    n = to_int(value)
+    return n if n is not None and -32768 <= n <= 32767 else None
+
+
 def to_float(value):
     if value is None or str(value).strip() == "":
         return None
     try:
-        return float(value)
+        f = float(value)
     except ValueError:
         return None
+    return f if math.isfinite(f) else None
 
 
 def parse_response(content):
@@ -123,11 +131,11 @@ def to_rows(items, lawd_cd, deal_ymd, collected_at):
         r = {snake(f): it.get(f, "") for f in FIELDS}
         r["deal_amount"] = to_int(r["deal_amount"])
         r["exclu_use_ar"] = to_float(r["exclu_use_ar"])
-        r["floor"] = to_int(r["floor"])
-        r["build_year"] = to_int(r["build_year"])
+        r["floor"] = to_smallint(r["floor"])
+        r["build_year"] = to_smallint(r["build_year"])
         try:
             r["deal_date"] = date(int(r["deal_year"]), int(r["deal_month"]), int(r["deal_day"]))
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             r["deal_date"] = None
         r.update(lawd_cd=lawd_cd, deal_ymd=deal_ymd, collected_at=collected_at)
         rows.append(r)

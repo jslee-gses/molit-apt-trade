@@ -61,7 +61,11 @@ API는 과거 자료도 새 코드로만 제공하므로 개편이 있으면 이
 | `REFRESH_AT` | `06:00` | 매일 수집을 시작하는 시각(KST). 최근 3개월 재수집도 이때 |
 | `DB_LIMIT_MB` | `5000` | 용량 사용률 기준(Railway Hobby 볼륨 5GB) |
 | `STORAGE_STOP_PCT` | `90` | 이 사용률 이상이면 과거 자료 수집 중단 |
+| `DB_POOL_MAX` | `8` | Postgres 커넥션 풀 크기 |
+| `PORT` | (Railway가 지정) | 웹 서버 포트 |
 | `DATA_DIR` | `data` | 옛 SQLite 위치(이전 스크립트 기본 경로) |
+
+앱은 스케줄러가 import 시점에 시작되므로 gunicorn을 `--workers 1`로, `--preload` 없이 실행해야 합니다.
 
 인증키·비밀번호는 로컬은 `.env`, Railway는 Variables에 둡니다(저장소에 올리지 않음).
 

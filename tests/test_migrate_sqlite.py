@@ -140,6 +140,19 @@ def test_invalid_deal_date_becomes_null(pg, tmp_path):
         assert c.execute("SELECT COUNT(*) AS n FROM trades WHERE deal_date IS NULL").fetchone()["n"] == 2
 
 
+def test_out_of_range_smallint_becomes_null(pg, tmp_path):
+    src = tmp_path / "trades.db"
+    make_sqlite(src)
+    conn = sqlite3.connect(src)
+    conn.execute("UPDATE trades SET floor = '99999', buildYear = '-99999' WHERE aptNm = '가'")
+    conn.commit()
+    conn.close()
+    assert migrate_sqlite.main(["--sqlite", str(src)]) == 0
+    with pg.connection() as c:
+        r = c.execute("SELECT floor, build_year FROM trades WHERE apt_nm = '가'").fetchone()
+    assert r == {"floor": None, "build_year": None}
+
+
 def test_refuses_when_only_trades_non_empty(pg, tmp_path, capsys):
     src = tmp_path / "trades.db"
     make_sqlite(src)

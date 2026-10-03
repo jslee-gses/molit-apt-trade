@@ -151,6 +151,13 @@ def run_batch(max_jobs=20):
                     log.warning("%s %s 실패: %s", deal_ymd, lawd_cd, e)
                     store.mark_error(conn, lawd_cd, deal_ymd, str(e))
                     state["last_error"] = f"{settings.now_str()} {deal_ymd} {lawd_cd}: {e}"
+                except api.QuotaExceeded:
+                    raise  # 바깥 처리기에서 다음 날까지 쉰다
+                except Exception as e:  # noqa: BLE001 - 한 작업의 예상 밖 오류가 배치 전체를 멈추지 않게
+                    log.exception("%s %s 예상 밖 오류", deal_ymd, lawd_cd)
+                    msg = f"{type(e).__name__}: {e}"
+                    store.mark_error(conn, lawd_cd, deal_ymd, msg)
+                    state["last_error"] = f"{settings.now_str()} {deal_ymd} {lawd_cd}: {msg}"
     except api.QuotaExceeded as e:
         # 다음 날 수집 시작 시각까지 쉰다
         resume = daily_start(1).strftime("%Y-%m-%d %H:%M:%S")

@@ -21,7 +21,13 @@ def quality_():
 @bp.route("/trades")
 def trades():
     where, params = filters(request.args)
-    limit = min(int(request.args.get("limit", 100) or 100), 1000)
+    try:
+        limit = int(request.args.get("limit", 100) or 100)
+    except ValueError:
+        return jsonify(error="limit은 숫자여야 합니다."), 400
+    if limit < 1:
+        return jsonify(error="limit은 1 이상이어야 합니다."), 400
+    limit = min(limit, 1000)
     with db.connection() as conn:
         rows = conn.execute(
             f"SELECT * FROM trades{where} ORDER BY deal_date DESC NULLS LAST, id DESC LIMIT %s",

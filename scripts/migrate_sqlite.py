@@ -49,8 +49,8 @@ def trade_row(r):
     row = {api.snake(f): r[f] for f in api.FIELDS}
     row["deal_amount"] = api.to_int(r["dealAmount"])
     row["exclu_use_ar"] = api.to_float(r["excluUseAr"])
-    row["floor"] = api.to_int(r["floor"])
-    row["build_year"] = api.to_int(r["buildYear"])
+    row["floor"] = api.to_smallint(r["floor"])
+    row["build_year"] = api.to_smallint(r["buildYear"])
     try:
         row["deal_date"] = date.fromisoformat(r["dealDate"]) if r["dealDate"] else None
     except ValueError:

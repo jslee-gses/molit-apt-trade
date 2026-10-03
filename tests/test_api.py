@@ -90,6 +90,27 @@ def test_to_rows_invalid_date_is_none():
     assert api.to_rows(items, "11110", "202601", None)[1]["deal_date"] is None
 
 
+def test_to_float_non_finite_is_none():
+    assert api.to_float("nan") is None and api.to_float("inf") is None and api.to_float("-Infinity") is None
+    assert api.to_float("84.5") == 84.5
+
+
+def test_to_smallint_range():
+    assert api.to_smallint("12") == 12 and api.to_smallint("-1") == -1
+    assert api.to_smallint("32767") == 32767 and api.to_smallint("-32768") == -32768
+    assert api.to_smallint("32768") is None and api.to_smallint("99999") is None
+    assert api.to_smallint("abc") is None
+
+
+def test_to_rows_out_of_range_values_become_none():
+    items = [{"floor": "99999", "buildYear": "-40000", "dealYear": "2026", "dealMonth": "1", "dealDay": "5",
+              "excluUseAr": "nan"},
+             {"dealYear": "99999999999999999999", "dealMonth": "1", "dealDay": "5"}]
+    a, b = api.to_rows(items, "11110", "202601", None)
+    assert a["floor"] is None and a["build_year"] is None and a["exclu_use_ar"] is None
+    assert b["deal_date"] is None
+
+
 class FakeResponse:
     def __init__(self, content, status_code=200):
         self.content = content

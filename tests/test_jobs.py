@@ -132,11 +132,30 @@ def test_run_batch_records_api_error(pg, monkeypatch):
         raise api.ApiError("HTTP 500")
 
     monkeypatch.setattr(api, "fetch_page", fetch_page)
-    jobs.run_batch(max_jobs=1)
+    jobs.run_batch(max_jobs=2)
     with pg.connection() as conn:
-        job = conn.execute("SELECT * FROM jobs WHERE status = 'error'").fetchone()
-    assert job["error"] == "HTTP 500" and job["attempts"] == 1
+        errs = conn.execute("SELECT * FROM jobs WHERE status = 'error'").fetchall()
+    assert len(errs) == 2                                # 첫 오류 뒤에도 다음 작업을 계속 처리
+    assert all(j["error"] == "HTTP 500" and j["attempts"] == 1 for j in errs)
     assert "HTTP 500" in jobs.state["last_error"]
+
+
+def test_run_batch_records_unexpected_error_and_continues(pg, monkeypatch):
+    monkeypatch.setattr(settings, "START_YMD", "202610")
+    monkeypatch.setattr(api, "fetch_page", fake_fetch_page({("11110", "202610"): [item()]}))
+
+    def bad_hook(conn, lawd_cd, deal_ymd, rows):
+        raise ValueError("hook boom")
+
+    monkeypatch.setattr(store, "AFTER_SAVE", [bad_hook])
+    jobs.run_batch(max_jobs=2)
+    with pg.connection() as conn:
+        errs = conn.execute("SELECT * FROM jobs WHERE status = 'error' ORDER BY lawd_cd").fetchall()
+    assert len(errs) == 2                                # 두 번째 작업도 처리됨
+    first = errs[0]
+    assert first["attempts"] == 1 and first["next_try_at"] is not None
+    assert first["error"] == "ValueError: hook boom"
+    assert "ValueError" in jobs.state["last_error"]
 
 
 def test_storage_pct_uses_db_size(pg, monkeypatch):
