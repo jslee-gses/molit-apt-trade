@@ -76,6 +76,7 @@ SECRET_KEY=임의의긴문자열
 COLLECT_ENABLED=false
 ```
 ```bash
+# Windows 예시
 py -3.14 -m venv .venv
 .venv/Scripts/python -m pip install -r requirements-dev.txt
 .venv/Scripts/python -m pytest
