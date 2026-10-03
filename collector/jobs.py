@@ -163,3 +163,8 @@ def run_batch(max_jobs=20):
         state["running"] = False
         state["current"] = None
         _lock.release()
+
+
+def progress():
+    """화면용 진행 상황: 집계 + 배치 상태(실행 중, 최근 오류, 대기 등)."""
+    return {**quality.progress(), **state}
