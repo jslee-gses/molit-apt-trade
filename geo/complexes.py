@@ -1,6 +1,10 @@
 """단지(aptSeq) 목록: 거래에서 등록·갱신하고, 좌표 상태를 관리한다."""
 from datetime import date
 
+import settings
+
+FLAG = "complexes_bootstrapped"
+
 UPSERT = """
 INSERT INTO complexes AS c (apt_seq, apt_nm, jibun, road_nm, build_year,
                             api_sgg_cd, api_umd_cd, api_umd_nm, last_deal_date)
@@ -33,10 +37,11 @@ def register(conn, lawd_cd, deal_ymd, rows):
 
 
 def bootstrap(conn):
-    """complexes가 비어 있으면 기존 trades 전체에서 단지를 한 번에 만든다(이전 직후 1회)."""
-    if conn.execute("SELECT EXISTS (SELECT 1 FROM complexes) AS e").fetchone()["e"]:
+    """기존 trades 전체에서 단지를 한 번에 만든다(이전 직후 1회). 완료 표식이 있으면 하지 않는다.
+    register가 먼저 넣은 행은 그대로 둔다."""
+    if conn.execute("SELECT 1 FROM app_flags WHERE name = %s", (FLAG,)).fetchone():
         return 0
-    return conn.execute("""
+    n = conn.execute("""
         INSERT INTO complexes (apt_seq, apt_nm, jibun, road_nm, build_year,
                                api_sgg_cd, api_umd_cd, api_umd_nm, last_deal_date)
         SELECT DISTINCT ON (btrim(apt_seq)) btrim(apt_seq), apt_nm, jibun, road_nm, build_year,
@@ -44,3 +49,6 @@ def bootstrap(conn):
           FROM trades WHERE btrim(COALESCE(apt_seq, '')) <> ''
          ORDER BY btrim(apt_seq), deal_date DESC NULLS LAST, id DESC
         ON CONFLICT DO NOTHING""").rowcount
+    conn.execute("INSERT INTO app_flags (name, set_at) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                 (FLAG, settings.now_ts()))
+    return n

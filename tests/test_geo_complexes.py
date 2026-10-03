@@ -22,6 +22,13 @@ def setup(monkeypatch):
     (("1111", "4100135", "0", "1", "0"), None),
     (("11110", "", "0", "1", "0"), None),
     ((None, None, None, None, None), None),
+    (("11110", "4100135", "0", "9999999999999999999", "0"), None),
+    (("１１１１０", "4100135", "0", "1", "0"), None),
+    (("11110	", "4100135", "0", "1", "0"), None),
+    (("11110", "4100135", "0", "000000012", "0"), "111104100135|0|12|0"),
+    (("11110", "4100135", "0", "1", "00a"), "111104100135|0|1|0"),
+    (("11110", "4100135", "0", "1", "0012"), "111104100135|0|1|12"),
+    (("11110", "4100135", "0", "  ", "0"), None),
 ])
 def test_road_key_python(args, expected):
     assert keys.road_key(*args) == expected
@@ -30,7 +37,11 @@ def test_road_key_python(args, expected):
 def test_road_key_sql_matches_python(pg):
     cases = [("11110", "4100135", "0", "00012", "00000"), ("11110", "4100135", "", "12", ""),
              (" 11110", "4100135 ", "1", "7", "3"), ("11110", "4100135", "0", "", "0"),
-             ("11110", "4100135", "0", "1a", "0"), (None, None, None, None, None)]
+             ("11110", "4100135", "0", "1a", "0"), (None, None, None, None, None),
+             ("11110", "4100135", "0", "9999999999999999999", "0"), ("１１１１０", "4100135", "0", "1", "0"),
+             ("11110	", "4100135", "0", "1", "0"), ("11110", "4100135", "0", "000000012", "0"),
+             ("11110", "4100135", "0", "1", "00a"), ("11110", "4100135", "0", "1", "0012"),
+             ("11110", "4100135", "0", "  ", "0"), ("11110", "4100135", "0", "1", "9999999999999")]
     with pg.connection() as conn:
         for c in cases:
             got = conn.execute("SELECT road_key(%s, %s, %s, %s, %s) AS k", c).fetchone()["k"]
@@ -69,6 +80,19 @@ def test_bootstrap_from_existing_trades(pg, monkeypatch):
         store.save_job(conn, "11110", "202601", [item(), item(aptSeq="11110-2", aptNm="둘")], 2)
         assert complexes.bootstrap(conn) == 2
         assert complexes.bootstrap(conn) == 0     # 이미 있으면 하지 않음
+        names = {r["apt_nm"] for r in conn.execute("SELECT apt_nm FROM complexes")}
+    assert names == {"테스트아파트", "둘"}
+
+
+def test_bootstrap_after_register_inserted_rows(pg, monkeypatch):
+    with pg.connection() as conn:
+        add_job(conn, "11110", "202601")
+        monkeypatch.setattr(store, "AFTER_SAVE", [complexes.register])
+        store.save_job(conn, "11110", "202601", [item()], 1)       # register가 1건 먼저 등록
+        monkeypatch.setattr(store, "AFTER_SAVE", [])
+        store.save_job(conn, "11110", "202601", [item(aptSeq="11110-2", aptNm="둘")], 1)
+        assert complexes.bootstrap(conn) >= 1
+        assert complexes.bootstrap(conn) == 0
         names = {r["apt_nm"] for r in conn.execute("SELECT apt_nm FROM complexes")}
     assert names == {"테스트아파트", "둘"}
 

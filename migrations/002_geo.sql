@@ -3,13 +3,13 @@
 CREATE FUNCTION road_key(sgg TEXT, road TEXT, under TEXT, bon TEXT, bu TEXT) RETURNS TEXT
 LANGUAGE sql IMMUTABLE AS $$
     SELECT CASE
-        WHEN btrim(COALESCE(sgg, '')) ~ '^\d{5}$'
-         AND btrim(COALESCE(road, '')) ~ '^\d{7}$'
-         AND btrim(COALESCE(bon, '')) ~ '^\d+$'
+        WHEN btrim(COALESCE(sgg, '')) ~ '^[0-9]{5}$'
+         AND btrim(COALESCE(road, '')) ~ '^[0-9]{7}$'
+         AND btrim(COALESCE(bon, '')) ~ '^[0-9]{1,9}$'
         THEN btrim(sgg) || btrim(road)
              || '|' || CASE WHEN btrim(COALESCE(under, '')) = '1' THEN '1' ELSE '0' END
-             || '|' || (btrim(bon)::bigint)::text
-             || '|' || (CASE WHEN btrim(COALESCE(bu, '')) ~ '^\d+$' THEN btrim(bu)::bigint ELSE 0 END)::text
+             || '|' || (btrim(bon)::int)::text
+             || '|' || (CASE WHEN btrim(COALESCE(bu, '')) ~ '^[0-9]{1,9}$' THEN btrim(bu)::int ELSE 0 END)::text
     END
 $$;
 
@@ -66,3 +66,6 @@ CREATE TABLE regions (
     PRIMARY KEY (boundary_version, region_cd)
 );
 CREATE INDEX ix_regions_parent ON regions (boundary_version, level, parent_cd);
+
+-- 일회성 작업 표식(예: 단지 초기 적재 완료)
+CREATE TABLE app_flags (name TEXT PRIMARY KEY, set_at TIMESTAMP NOT NULL);
