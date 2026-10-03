@@ -5,8 +5,10 @@ import psycopg
 import pytest
 
 import settings
+from collector import api
 from geo import assign, complexes, hooks, locate, pipeline, versions
 from tests.geo_fixtures import make_version
+from tests.helpers import item
 
 
 @pytest.fixture(autouse=True)
@@ -51,9 +53,16 @@ def _result():
 
 
 def test_register_takes_lock(pg, other):
+    rows = api.to_rows([item(aptSeq="A")], "11110", "202601", None)
+    with pg.connection() as a, a.transaction():
+        complexes.register(a, "11110", "202601", rows)
+        assert _try_lock(other) is False
+
+
+def test_register_without_complexes_skips_lock(pg, other):
     with pg.connection() as a, a.transaction():
         complexes.register(a, "11110", "202601", [])
-        assert _try_lock(other) is False
+        assert _try_lock(other) is True
 
 
 def test_apply_results_takes_lock(pg, other):
@@ -109,3 +118,10 @@ def test_pipeline_bootstrap_failure_isolated(pg, tmp_path, monkeypatch):
     assert pipeline.state["last_error"] is None
     assert ran == [True]
     assert pipeline.state["last_result"]["added"] == 0
+
+
+def test_address_points_load_takes_lock(pg, other):
+    from geo import address_points
+    with pg.connection() as a, a.transaction():
+        address_points.load(a, [("11110|사직로|161|0", 126.955, 37.575, None)], "202609")
+        assert _try_lock(other) is False

@@ -41,8 +41,8 @@ def register(conn, lawd_cd, deal_ymd, rows):
         cur = latest.get(seq)
         if cur is None or (r["deal_date"] or date.min) >= (cur["deal_date"] or date.min):
             latest[seq] = {**r, "apt_seq": seq}
-    lock_complexes(conn)
     if latest:
+        lock_complexes(conn)
         with conn.cursor() as cur:
             cur.executemany(UPSERT, list(latest.values()))
 

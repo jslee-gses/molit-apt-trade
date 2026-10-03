@@ -101,7 +101,7 @@ def wanted_keys(conn):
 
 def load(conn, rows, month):
     """address_points를 rows로 통째로 교체하고 failed 단지를 다시 찾게 한다. → 적재 행 수"""
-    from geo import locate
+    from geo import complexes, locate
 
     if not rows:
         raise ValueError("적재할 행이 없습니다(빈 목록으로 address_points를 비울 수 없음)")
@@ -111,6 +111,7 @@ def load(conn, rows, month):
                 "COPY address_points (road_key, lon, lat, bld_nm, source_month) FROM STDIN") as copy:
             for key, lon, lat, name in rows:
                 copy.write_row([key, lon, lat, name or None, month])
+        complexes.lock_complexes(conn)
         locate.retry_failed(conn)
     return len(rows)
 
