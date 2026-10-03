@@ -79,7 +79,71 @@ def test_migrate_refuses_non_empty_without_replace(pg, tmp_path):
         assert conn.execute("SELECT COUNT(*) AS n FROM trades").fetchone()["n"] == 2
 
 
-def test_migrate_reports_count_mismatch(pg, tmp_path):
+def test_source_count_mismatch_is_warning_only(pg, tmp_path, capsys):
     src = tmp_path / "trades.db"
     make_sqlite(src, stored_count=3)
+    assert migrate_sqlite.main(["--sqlite", str(src)]) == 0
+    out = capsys.readouterr().out
+    assert "경고" in out and "작업 기록 3 / 실제 2" in out
+
+
+def test_prints_per_table_counts(pg, tmp_path, capsys):
+    src = tmp_path / "trades.db"
+    make_sqlite(src)
+    assert migrate_sqlite.main(["--sqlite", str(src)]) == 0
+    out = capsys.readouterr().out
+    assert "trades: 원본 2행 / Postgres 2행" in out
+    assert "jobs: 원본 2행 / Postgres 2행" in out
+    assert "api_usage: 원본 1행" in out and "changes: 원본 1행" in out
+
+
+def test_jobs_without_q_columns(pg, tmp_path):
+    src = tmp_path / "trades.db"
+    make_sqlite(src)
+    conn = sqlite3.connect(src)
+    conn.executescript("""
+        CREATE TABLE jobs2 AS SELECT lawd_cd, deal_ymd, status, total_count, stored_count, fetched_at,
+            checked_at, attempts, next_try_at, error FROM jobs;
+        DROP TABLE jobs; ALTER TABLE jobs2 RENAME TO jobs;""")
+    conn.commit()
+    conn.close()
+    assert migrate_sqlite.main(["--sqlite", str(src)]) == 0
+    with pg.connection() as c:
+        job = c.execute("SELECT status, q_blank, q_dup FROM jobs WHERE lawd_cd = '11110'").fetchone()
+    assert job == {"status": "done", "q_blank": None, "q_dup": None}
+
+
+def test_q_blank_keys_become_snake_and_invalid_json_null(pg, tmp_path):
+    src = tmp_path / "trades.db"
+    make_sqlite(src)
+    conn = sqlite3.connect(src)
+    conn.execute("UPDATE jobs SET q_blank = ? WHERE lawd_cd = '11110'", ('{"aptNm": 2, "dealDate": 1}',))
+    conn.execute("UPDATE jobs SET q_blank = ? WHERE lawd_cd = '11140'", ("{not json",))
+    conn.commit()
+    conn.close()
+    assert migrate_sqlite.main(["--sqlite", str(src)]) == 0
+    with pg.connection() as c:
+        rows = {r["lawd_cd"]: r["q_blank"] for r in c.execute("SELECT lawd_cd, q_blank FROM jobs")}
+    assert rows["11110"] == {"apt_nm": 2, "deal_date": 1}
+    assert rows["11140"] is None
+
+
+def test_invalid_deal_date_becomes_null(pg, tmp_path):
+    src = tmp_path / "trades.db"
+    make_sqlite(src)
+    conn = sqlite3.connect(src)
+    conn.execute("UPDATE trades SET dealDate = '2026-02-30' WHERE dealDate = '2026-01-02'")
+    conn.commit()
+    conn.close()
+    assert migrate_sqlite.main(["--sqlite", str(src)]) == 0
+    with pg.connection() as c:
+        assert c.execute("SELECT COUNT(*) AS n FROM trades WHERE deal_date IS NULL").fetchone()["n"] == 2
+
+
+def test_refuses_when_only_trades_non_empty(pg, tmp_path, capsys):
+    src = tmp_path / "trades.db"
+    make_sqlite(src)
+    with pg.connection() as c:
+        c.execute("INSERT INTO trades(lawd_cd, deal_ymd) VALUES ('1', '202601')")
     assert migrate_sqlite.main(["--sqlite", str(src)]) == 1
+    assert "trades" in capsys.readouterr().out
