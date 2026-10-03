@@ -45,6 +45,8 @@ def create_app():
     flask_app.wsgi_app = ProxyFix(flask_app.wsgi_app, x_for=1, x_proto=1)
     flask_app.json = JSONProvider(flask_app)
     db.migrate()
+    import wiring
+    wiring.wire()
     flask_app.register_blueprint(auth.bp)
     flask_app.register_blueprint(pages.bp)
     flask_app.register_blueprint(api.bp)
