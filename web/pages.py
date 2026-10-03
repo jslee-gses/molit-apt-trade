@@ -1,14 +1,11 @@
-"""화면: 거래 목록, 수집 현황, CSV 다운로드."""
-import csv
-import io
-
-from flask import Blueprint, Response, render_template, request
+﻿"""화면: 거래 목록, 수집 현황."""
+from flask import Blueprint, redirect, render_template, request, url_for
 
 import db
 import settings
 from collector import jobs, quality
 from geo import complexes, pipeline
-from web.common import CODES, LABELS, SIDO, api_row, filters
+from web.common import CODES, SIDO, api_row, filters
 
 bp = Blueprint("pages", __name__)
 PAGE_SIZE = 50
@@ -65,31 +62,5 @@ def status():
 
 @bp.route("/download.csv")
 def download():
-    args = request.args
-    if not any(args.get(k) for k in ("sido", "lawd_cd", "year", "ymd")):
-        # 전체(2006년~) 한 번에 내려받으면 수 GB가 되어 서버에 부담이 크다
-        return Response("시도·시군구·연도·계약월 중 하나 이상을 선택한 뒤 내려받으세요.",
-                        status=400, mimetype="text/plain; charset=utf-8")
-    where, params = filters(args)
-
-    def generate():
-        buf = io.StringIO()
-        writer = csv.writer(buf)
-        # utf-8-sig: 엑셀에서 한글이 깨지지 않도록 BOM을 맨 앞에 붙인다
-        yield "\ufeff".encode("utf-8")
-        writer.writerow([label for _, label in LABELS])
-        # 서버 측 커서(이름 있는 커서)는 트랜잭션 안에서만 동작한다
-        with db.connection() as conn, conn.transaction(), conn.cursor(name="download") as cur:
-            cur.execute(f"SELECT * FROM trades{where} ORDER BY deal_date, lawd_cd", params)
-            while batch := cur.fetchmany(5000):
-                for row in batch:
-                    d = api_row(row)
-                    writer.writerow(["" if d.get(k) is None else d.get(k) for k, _ in LABELS])
-                yield buf.getvalue().encode("utf-8")
-                buf.seek(0)
-                buf.truncate()
-        if buf.tell():
-            yield buf.getvalue().encode("utf-8")
-
-    return Response(generate(), mimetype="text/csv",
-                    headers={"Content-Disposition": "attachment; filename=apt_trades.csv"})
+    """옛 주소: 같은 조건으로 /export.csv(원본)로 보낸다."""
+    return redirect(url_for("export.export_csv", **{**request.args.to_dict(), "target": "raw"}), code=301)

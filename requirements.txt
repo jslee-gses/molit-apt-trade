@@ -5,3 +5,4 @@ pandas==2.3.*
 apscheduler==3.11.*
 psycopg[binary,pool]==3.2.*
 shapely==2.1.*
+pyarrow>=21

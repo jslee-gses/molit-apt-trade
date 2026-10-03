@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 
 import pytest
 
@@ -41,22 +41,6 @@ def test_status_page(client, seeded):
     resp = client.get("/status")
     assert resp.status_code == 200
     assert "누락 점검" in resp.get_data(as_text=True)
-
-
-def test_download_requires_filter(client, seeded):
-    resp = client.get("/download.csv")
-    assert resp.status_code == 400
-
-
-def test_download_csv(client, seeded):
-    resp = client.get("/download.csv?year=2026")
-    body = resp.get_data()
-    assert resp.status_code == 200
-    assert body.startswith("\ufeff".encode("utf-8"))
-    text = body.decode("utf-8-sig")
-    header = text.splitlines()[0].split(",")
-    assert header[:3] == ["계약일", "시도", "시군구"]
-    assert "종로아파트" in text and "2026-01-05" in text
 
 
 def test_api_trades_camel_case(client, seeded):

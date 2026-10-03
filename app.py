@@ -29,7 +29,7 @@ class JSONProvider(DefaultJSONProvider):
 
 
 def create_app():
-    from web import api, auth, pages
+    from web import api, auth, export, pages
     from web.common import register_filters
 
     flask_app = Flask(__name__)
@@ -49,6 +49,7 @@ def create_app():
     wiring.wire()
     flask_app.register_blueprint(auth.bp)
     flask_app.register_blueprint(pages.bp)
+    flask_app.register_blueprint(export.bp)
     flask_app.register_blueprint(api.bp)
     auth.protect(flask_app)
     register_filters(flask_app)
