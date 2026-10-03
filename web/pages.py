@@ -5,7 +5,7 @@ from flask import Blueprint, abort, redirect, render_template, request, url_for
 
 import db
 import settings
-from analytics import params, queries
+from analytics import aggregates, params, queries
 from analytics.params import BadParam
 from collector import jobs, quality
 from geo import complexes, pipeline
@@ -40,6 +40,11 @@ def map_page():
     return render_template("map.html", p=jobs.progress(), bands=params.BANDS)
 
 
+@bp.route("/export")
+def export_page():
+    return render_template("export.html", p=jobs.progress(), bands=params.BANDS)
+
+
 @bp.route("/trades")
 def trades():
     args = request.args
@@ -71,8 +76,9 @@ def trades():
 def status():
     with db.connection() as conn:
         g = dict(complexes.summary(conn), failed=complexes.failed(conn), pipeline=pipeline.state)
+        agg = aggregates.status(conn)
     return render_template(
-        "status.html", p=jobs.progress(), q=quality.quality_report(), g=g, start_ymd=settings.START_YMD,
+        "status.html", p=jobs.progress(), q=quality.quality_report(), g=g, agg=agg, start_ymd=settings.START_YMD,
         refresh_months=settings.REFRESH_MONTHS, refresh_at=settings.REFRESH_AT,
         recheck_days=settings.RECHECK_DAYS, old_recheck_days=settings.OLD_RECHECK_DAYS,
         interval=settings.REQUEST_INTERVAL,

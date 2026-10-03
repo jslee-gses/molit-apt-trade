@@ -56,3 +56,13 @@ def test_complex_page(client, seeded):
     html = client.get("/complexes/A").get_data(as_text=True)
     assert "청운아파트" in html and "서울특별시 종로구 청운동" in html and 'id="scatter"' in html
     assert client.get("/complexes/ZZZ").status_code == 404
+
+
+def test_export_page(client, seeded):
+    html = client.get("/export").get_data(as_text=True)
+    assert 'id="export-form"' in html and "/export/codebook.csv" in html
+
+
+def test_status_shows_aggregates(client, seeded):
+    html = client.get("/status").get_data(as_text=True)
+    assert "집계 대기 계약월" in html

@@ -45,10 +45,18 @@ API는 과거 자료도 새 코드로만 제공하므로 개편이 있으면 이
 ## 엔드포인트
 | 경로 | 설명 |
 |---|---|
-| `/` | 거래 목록 (시도·시군구·연도·계약월·검색 필터) |
-| `/status` | 수집 현황·누락 점검 |
-| `/download.csv` | 현재 필터 조건으로 CSV 다운로드 (지역·연도·계약월 중 하나 필수) |
-| `/api/trades`, `/api/status`, `/api/quality` | JSON |
+| `/` | 대시보드: 전국 요약, 24개월 거래량·중위가, 전년 대비 상승·하락 시군구 |
+| `/trends` | 추이: 지역 최대 8개 비교, 지표·면적·기간, 이동평균·지수, 표·PNG |
+| `/map` | 지도: 시도 → 시군구 → 읍면동 단계구분도, 순위표 |
+| `/complexes`, `/complexes/<aptSeq>` | 단지 검색·상세(거래 산점도, 면적·층 분포) |
+| `/export` | 원본·월별 집계 CSV / Parquet 추출, 코드북 |
+| `/trades` | 거래 목록(시도·시군구·연도·계약월·검색 필터) |
+| `/status` | 수집 현황·누락 점검·좌표·집계 현황 |
+| `/api/regions`, `/api/agg`, `/api/map`, `/api/summary`, `/api/complexes` | 분석 JSON |
+| `/export.csv`, `/export.parquet`, `/export/codebook.csv` | 추출 파일 (`/download.csv`는 `/export.csv`로 이동) |
+| `/api/trades`, `/api/status`, `/api/quality` | 기존 JSON |
+
+집계 규칙: 해제 거래·금액 없는 거래 제외, 완전 중복 1건, 지역은 최신 경계(단지 좌표 판정) 기준, 최근 2개월은 잠정.
 
 ## 환경변수
 | 이름 | 기본값 | 설명 |
@@ -89,6 +97,12 @@ py -3.14 -m venv .venv
 .venv/Scripts/python -m pytest
 .venv/Scripts/python app.py        # http://localhost:8000
 ```
+
+화면을 가짜 데이터로 확인하려면(로컬 DB 전용, 모든 수집된 거래를 삭제합니다):
+```bash
+DATABASE_URL=postgresql://USER:PASS@localhost:5432/molit_seed .venv/Scripts/python scripts/seed_dev.py --reset
+```
+먼저 `molit_seed` DB를 따로 만드세요. `seed_dev.py`는 DATABASE_URL에 연결된 DB를 가짜 데이터로 채우고, `--reset` 옵션은 기존 테이블을 모두 지웁니다.
 
 ## 지리 데이터
 좌표는 주소정보누리집 위치정보요약DB(도로명주소 매칭), 경계는 브이월드·국가공간정보포털 읍면동 SHP로 만듭니다.

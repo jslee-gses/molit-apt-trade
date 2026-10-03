@@ -116,6 +116,13 @@
 </table></div>
 {% endif %}
 
+<h2>월별 집계</h2>
+<div class="tiles">
+  <div class="tile"><div class="k">집계 대기 계약월</div><div class="v {{ 'warn' if agg.dirty > 24 }}">{{ agg.dirty|comma }}</div></div>
+  <div class="tile"><div class="k">집계 행 수</div><div class="v">{{ agg.rows|comma }}</div></div>
+  <div class="tile"><div class="k">집계된 최근 계약월</div><div class="v">{{ agg.latest_ym or '-' }}</div></div>
+</div>
+
 <h2>단지 좌표·지역 판정</h2>
 <div class="tiles">
   <div class="tile"><div class="k">좌표 확보 단지</div>
@@ -134,6 +141,7 @@
   {% if g.pipeline.sync_error %}<span class="err">· {{ g.pipeline.sync_error }}</span>{% endif %}
   {% if g.pipeline.bootstrap_error %}<span class="err">· {{ g.pipeline.bootstrap_error }}</span>{% endif %}</p>
 {% if g.failed %}
+
 <h2>좌표를 찾지 못한 단지 (거래 많은 순 {{ g.failed|length }}개)</h2>
 <div class="wrap"><table>
   <thead><tr><th>단지</th><th>시군구코드</th><th>법정동</th><th>지번</th><th>도로명</th><th class="num">거래</th>
