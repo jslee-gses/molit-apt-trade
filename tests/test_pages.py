@@ -55,6 +55,7 @@ def test_map_page(client, seeded):
 def test_complexes_search_page(client, seeded):
     html = client.get("/complexes?q=청운").get_data(as_text=True)
     assert "청운아파트" in html and 'href="/complexes/A"' in html and "무교타워" not in html
+    assert '<header class="page-head">' in html and 'class="data-table"' in html
 
 
 def test_complexes_bad_region(client, seeded):
@@ -65,6 +66,7 @@ def test_complexes_bad_region(client, seeded):
 def test_complex_page(client, seeded):
     html = client.get("/complexes/A").get_data(as_text=True)
     assert "청운아파트" in html and "서울특별시 종로구 청운동" in html and 'id="scatter"' in html
+    assert "<h1>청운아파트</h1>" in html and 'class="data-table"' in html and 'class="badge' in html
     assert client.get("/complexes/ZZZ").status_code == 404
 
 

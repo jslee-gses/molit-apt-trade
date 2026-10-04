@@ -1,23 +1,26 @@
 {% extends "base.html" %}
+{% import "_ui.html" as ui %}
 {% block title %}단지 · 아파트 실거래가{% endblock %}
+{% block page_head %}{{ ui.page_head('단지 검색', '단지명이나 지역 코드로 찾아 거래 이력과 면적·층 분포를 봅니다.') }}{% endblock %}
 {% block body %}
-<form class="bar" method="get">
-  <input type="text" name="q" value="{{ q }}" placeholder="단지명">
-  <input type="text" name="region" value="{{ region }}" placeholder="지역 코드(시도 2·시군구 5·읍면동 8자리)" style="flex:0 1 260px">
-  <button class="primary">검색</button>
+<form class="card filters" method="get">
+  <div class="filter-row">
+    <input type="search" name="q" value="{{ q }}" placeholder="단지명" aria-label="단지명">
+    <input type="text" name="region" value="{{ region }}" placeholder="지역 코드(시도 2·시군구 5·읍면동 8자리)" aria-label="지역 코드" style="flex:0 1 300px">
+    <button class="primary">검색</button>
+  </div>
 </form>
 {% if error %}<p class="err">{{ error }}</p>{% endif %}
-<div class="wrap"><table>
-  <thead><tr><th>단지</th><th>지역(최신 경계)</th><th>법정동(신고)</th><th class="num">건축년도</th><th>최근 계약일</th></tr></thead>
+<div class="table-wrap"><table class="data-table">
+  <thead><tr><th scope="col">단지</th><th scope="col">법정동(신고)</th><th scope="col" class="num">건축년도</th><th scope="col">최근 계약일</th></tr></thead>
   <tbody>
   {% for r in rows %}
-    <tr><td><a href="/complexes/{{ r.apt_seq|urlencode }}">{{ r.apt_nm or r.apt_seq }}</a></td>
-      <td>{{ r.region_name or '' }}</td><td>{{ r.api_umd_nm or '' }}</td>
-      <td class="num">{{ r.build_year or '' }}</td><td>{{ r.last_deal_date or '' }}</td></tr>
+    <tr><td><a href="/complexes/{{ r.apt_seq|urlencode }}"><b>{{ r.apt_nm or r.apt_seq }}</b></a><small>{{ r.region_name or '지역 미판정' }}</small></td>
+      <td>{{ r.api_umd_nm or '' }}</td><td class="num">{{ r.build_year or '' }}</td><td>{{ r.last_deal_date or '' }}</td></tr>
   {% else %}
-    <tr><td colspan="5" class="muted">검색 결과가 없습니다.</td></tr>
+    <tr><td colspan="4" class="muted">검색 결과가 없습니다.</td></tr>
   {% endfor %}
   </tbody>
 </table></div>
-<p class="meta">최근 거래 순 최대 50개</p>
+<p class="table-foot">{{ rows|length }}개 단지 · 최근 거래 순 최대 50개</p>
 {% endblock %}
