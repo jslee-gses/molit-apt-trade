@@ -13,7 +13,7 @@ def _tokens(block):
 
 def _themes():
     text = CSS.read_text(encoding="utf-8")
-    light, _, dark = text.partition("@media (prefers-color-scheme: dark)")
+    light, _, dark = text.partition(':root[data-theme="dark"]')
     return _tokens(light), {**_tokens(light), **_tokens(dark)}
 
 
@@ -81,3 +81,19 @@ def test_page_head_macro(app):
         ui = app.jinja_env.get_template("_ui.html").module
         html = str(ui.page_head("지도", "설명 <b>"))
     assert '<header class="page-head">' in html and "<h1>지도</h1>" in html and "설명 &lt;b&gt;" in html
+
+
+def test_dark_theme_follows_data_theme_attribute():
+    """어두운 테마는 <html data-theme="dark">로 켠다(시스템 설정은 head의 스크립트가 data-theme으로 옮긴다)."""
+    css = CSS.read_text(encoding="utf-8")
+    assert ':root[data-theme="dark"]' in css and "prefers-color-scheme" not in css
+
+
+def test_theme_switch_in_topbar(client, app):
+    for html in (client.get("/status").get_data(as_text=True), app.test_client().get("/login").get_data(as_text=True)):
+        assert 'id="theme" role="group" aria-label="화면 테마"' in html
+        for v in ("system", "light", "dark"):
+            assert f'data-value="{v}"' in html
+        # 화면을 그리기 전에 data-theme을 정하는 head 스크립트(깜빡임 방지)
+        head = html.split("</head>")[0]
+        assert "data-theme" in head and "localStorage" in head and "prefers-color-scheme" in head

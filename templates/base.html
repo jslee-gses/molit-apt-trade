@@ -6,6 +6,15 @@
   <title>{% block title %}아파트 실거래가{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='fonts/pretendard/pretendard.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  <script>
+    // 화면을 그리기 전에 테마를 정한다(깜빡임 방지). 저장된 선택(light/dark)이 없으면 시스템 설정(prefers-color-scheme)을 따른다.
+    (function () {
+      var v = null;
+      try { v = localStorage.getItem('theme'); } catch (e) {}
+      var dark = v === 'dark' || (v !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    })();
+  </script>
 </head>
 <body>
 <header class="topbar"><div class="topbar-in">
@@ -19,6 +28,11 @@
     <a href="/trades" class="{{ 'on' if request.path == '/trades' }}"{% if request.path == '/trades' %} aria-current="page"{% endif %}>거래 목록</a>
     <a href="/status" class="{{ 'on' if request.path == '/status' }}"{% if request.path == '/status' %} aria-current="page"{% endif %}>수집 현황</a>
   </nav>
+  <div class="pills theme-switch" id="theme" role="group" aria-label="화면 테마">
+    <button type="button" class="pill" data-value="system" aria-pressed="true">시스템</button>
+    <button type="button" class="pill" data-value="light" aria-pressed="false">밝게</button>
+    <button type="button" class="pill" data-value="dark" aria-pressed="false">어둡게</button>
+  </div>
   {% if session.get('auth') %}<form method="post" action="/logout" class="logout"><button class="ghost small">로그아웃</button></form>{% endif %}
 </div></header>
 <main>
@@ -35,6 +49,7 @@
   {% block body %}{% endblock %}
   <p class="site-foot">지역 경계: 국토지리정보원 연속수치지형도 행정경계(읍면동), CC BY · 단지 좌표: 주소정보누리집 위치정보요약DB · 글꼴: Pretendard(OFL)</p>
 </main>
+<script src="{{ url_for('static', filename='js/theme.js') }}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

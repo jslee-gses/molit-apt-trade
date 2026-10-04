@@ -51,8 +51,7 @@ const App = (() => {
 
   function chart(el) {
     const c = echarts.init(el);
-    window.addEventListener('resize', () => c.resize());
-    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => location.reload());
+    window.addEventListener('resize', () => c.resize());   // 테마가 바뀌면 theme.js가 새로고침한다
     return c;
   }
 

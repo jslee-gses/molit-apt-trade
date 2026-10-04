@@ -1,4 +1,5 @@
-/* 분석 화면 공통 스타일. 색은 토큰으로만 쓰고, 어두운 테마는 토큰만 다시 정의한다.
+/* 분석 화면 공통 스타일. 색은 토큰으로만 쓰고, 어두운 테마는 <html data-theme="dark">에서 토큰만 다시 정의한다
+   (data-theme은 base.html head의 스크립트가 저장된 선택·시스템 설정으로 정한다).
    토큰 이름은 static/js의 App.css('--…')와 tests/test_ui.py(대비 검사)가 읽는다. */
 :root {
   color-scheme: light;
@@ -21,20 +22,18 @@
   --radius:16px; --radius-sm:10px;
   --font:"Pretendard Variable", Pretendard, -apple-system, "Malgun Gothic", sans-serif;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --bg:#0d1726; --card:#16233a; --ink:#7fb0ff; --on-ink:#0d1726; --text:#e6ecf5; --muted:#9aabc2;
-    --line:#26364f; --accent:#7fb0ff; --soft:#1c2c47; --track:#26364f; --nodata:#4a5262;
-    --shadow:0 1px 2px rgba(0,0,0,.35);
-    --red:#f08a89; --amber:#f0b54d; --green:#5cc98f;
-    --up:#ff9b9a; --down:#8fbaff;
-    --m-price:#5ea2f0; --m-ppm2:#e06aa9; --m-count:#d9a845; --m-yoy:#4cc3bd;
-    --series-1:#3987e5; --series-2:#d95926; --series-3:#199e70; --series-4:#c98500;
-    --series-5:#d55181; --series-6:#008300; --series-7:#9085e9; --series-8:#e66767;
-    --seq-100:#1b2d48; --seq-200:#23426e; --seq-300:#2d5b96; --seq-400:#3b78bf; --seq-500:#5a96dc; --seq-600:#86b6f0; --seq-700:#c2dbff;
-    --div-neg-2:#8fbaff; --div-neg-1:#3d6aa6; --div-mid:#33415a; --div-pos-1:#a24a4a; --div-pos-2:#ff9b9a; --grid:#22324a; --axis:#33435c; --provisional:rgba(154,171,194,0.16);
-  }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg:#0d1726; --card:#16233a; --ink:#7fb0ff; --on-ink:#0d1726; --text:#e6ecf5; --muted:#9aabc2;
+  --line:#26364f; --accent:#7fb0ff; --soft:#1c2c47; --track:#26364f; --nodata:#4a5262;
+  --shadow:0 1px 2px rgba(0,0,0,.35);
+  --red:#f08a89; --amber:#f0b54d; --green:#5cc98f;
+  --up:#ff9b9a; --down:#8fbaff;
+  --m-price:#5ea2f0; --m-ppm2:#e06aa9; --m-count:#d9a845; --m-yoy:#4cc3bd;
+  --series-1:#3987e5; --series-2:#d95926; --series-3:#199e70; --series-4:#c98500;
+  --series-5:#d55181; --series-6:#008300; --series-7:#9085e9; --series-8:#e66767;
+  --seq-100:#1b2d48; --seq-200:#23426e; --seq-300:#2d5b96; --seq-400:#3b78bf; --seq-500:#5a96dc; --seq-600:#86b6f0; --seq-700:#c2dbff;
+  --div-neg-2:#8fbaff; --div-neg-1:#3d6aa6; --div-mid:#33415a; --div-pos-1:#a24a4a; --div-pos-2:#ff9b9a; --grid:#22324a; --axis:#33435c; --provisional:rgba(154,171,194,0.16);
 }
 
 /* 기본 요소 */
@@ -67,7 +66,9 @@ td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
 .topbar nav a { color:var(--muted); font-weight:600; padding:18px 10px 16px; border-bottom:3px solid transparent; }
 .topbar nav a.on { color:var(--ink); border-bottom-color:var(--ink); }
 .topbar nav a:hover { color:var(--ink); text-decoration:none; }
-.topbar .logout { margin-left:auto; }
+.topbar .logout { margin-left:8px; }
+.theme-switch { margin-left:auto; gap:4px; }
+.theme-switch .pill { height:30px; padding:0 10px; font-size:13px; }
 
 /* 본문 틀 */
 main { max-width:1280px; margin:0 auto; padding:28px 16px 40px; }
