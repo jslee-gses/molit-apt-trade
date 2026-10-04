@@ -30,6 +30,7 @@
     --m-price:#5ea2f0; --m-ppm2:#e06aa9; --m-count:#d9a845; --m-yoy:#4cc3bd;
     --series-1:#3987e5; --series-2:#d95926; --series-3:#199e70; --series-4:#c98500;
     --series-5:#d55181; --series-6:#008300; --series-7:#9085e9; --series-8:#e66767;
+    --seq-100:#1b2d48; --seq-200:#23426e; --seq-300:#2d5b96; --seq-400:#3b78bf; --seq-500:#5a96dc; --seq-600:#86b6f0; --seq-700:#c2dbff;
     --div-mid:#33415a; --grid:#22324a; --axis:#33435c; --provisional:rgba(154,171,194,0.16);
   }
 }
@@ -159,6 +160,7 @@ a.rank-item { grid-template-columns:48px minmax(0,1fr) auto; }
 .map-layout { display:grid; grid-template-columns:minmax(0, 1.35fr) minmax(320px, 1fr); gap:16px; align-items:start; }
 .map-card { padding:12px; }
 .rank-card { display:flex; flex-direction:column; gap:12px; max-height:584px; }
+.rank-card > input { flex:0 0 auto; }
 .rank-card .rank-list { overflow-y:auto; min-height:0; flex:1 1 auto; }
 .crumbs { margin-left:auto; color:var(--muted); font-size:14px; }
 .crumbs b { color:var(--ink); }

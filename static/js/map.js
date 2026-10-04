@@ -36,9 +36,10 @@
 
   const metricPills = App.pills(el('metric'), () => { sort = null; render(); });
   const bandPills = App.pills(el('band'), () => render());
-  if (!(state.metric in METRICS)) state.metric = 'median_price';
+  if (!Object.hasOwn(METRICS, state.metric)) state.metric = 'median_price';
   if (!bandPills.has(state.band)) state.band = 'all';
   if (!['sido', 'sgg', 'umd'].includes(state.level)) { state.level = 'sido'; state.parent = ''; }
+  if (state.level !== 'sido' && !state.parent) state.level = 'sido';
   metricPills.value = state.metric;
   bandPills.value = state.band;
 
@@ -148,7 +149,7 @@
       a.onclick = (ev) => {
         ev.preventDefault();
         state.level = a.dataset.level; state.parent = a.dataset.parent;
-        selected = null; el('side').hidden = true;
+        selected = null; el('side').hidden = true; el('rank-q').value = '';
         render();
       };
     });
@@ -170,7 +171,7 @@
     const q = el('rank-q').value.trim();
     const items = sortRows(data.values, field, -1).map((v, i) => ({ v, i }))
       .filter(({ v }) => !q || v.name.includes(q) || v.full_name.includes(q));
-    el('ranking').innerHTML = items.map(({ v, i }) => `<li><button type="button" class="rank-item${v.region_cd === selected ? ' on' : ''}" data-cd="${esc(v.region_cd)}">`
+    el('ranking').innerHTML = items.map(({ v, i }) => `<li><button type="button" class="rank-item${v.region_cd === selected ? ' on' : ''}" data-cd="${esc(v.region_cd)}" aria-pressed="${v.region_cd === selected}">`
       + `<span class="rank-no">${v[field] == null ? '-' : `#${i + 1}`}</span>`
       + `<span class="rank-name"><b>${esc(v.name)}</b><small>거래 ${cnt(v.n)}</small></span>`
       + `<span class="rank-val">${f(v[field])}</span>`
@@ -213,7 +214,7 @@
     if (!v) return;
     selected = code;
     chart.dispatchAction({ type: 'select', seriesIndex: 0, name: code });
-    el('ranking').querySelectorAll('.rank-item').forEach((b) => b.classList.toggle('on', b.dataset.cd === code));
+    el('ranking').querySelectorAll('.rank-item').forEach((b) => { b.classList.toggle('on', b.dataset.cd === code); b.setAttribute('aria-pressed', String(b.dataset.cd === code)); });
     showMini(v);
   }
 
@@ -229,7 +230,7 @@
     el('side-drill').hidden = !NEXT[level];
     el('side-drill').onclick = () => {
       state.parent = v.region_cd; state.level = NEXT[level];
-      selected = null; el('side').hidden = true;
+      selected = null; el('side').hidden = true; el('rank-q').value = '';
       render();
     };
     try {
@@ -254,7 +255,7 @@
     if (NEXT[state.level]) {
       showMini(v);
       state.parent = v.region_cd; state.level = NEXT[state.level];
-      selected = null;
+      selected = null; el('rank-q').value = '';
       render();
     } else {
       select(v.region_cd);
