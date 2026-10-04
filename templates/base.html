@@ -4,63 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}아파트 실거래가{% endblock %}</title>
-  <style>
-    :root { --bg:#f7f7f8; --card:#fff; --text:#1a1a1a; --muted:#6b7280; --line:#e5e7eb; --accent:#2563eb; --red:#dc2626; --amber:#b45309; --green:#15803d; --track:#e5e7eb; }
-    :root { --series-1:#2a78d6; --series-2:#eb6834; --series-3:#1baf7a; --series-4:#eda100; --series-5:#e87ba4; --series-6:#008300; --series-7:#4a3aa7; --series-8:#e34948;
-            --seq-100:#cde2fb; --seq-200:#9ec5f4; --seq-300:#6da7ec; --seq-400:#3987e5; --seq-500:#256abf; --seq-600:#184f95; --seq-700:#0d366b;
-            --div-neg-2:#1c5cab; --div-neg-1:#86b6ef; --div-mid:#f0efec; --div-pos-1:#f2a3a2; --div-pos-2:#c23a39;
-            --grid:#e1e0d9; --axis:#c3c2b7; --provisional:rgba(137,135,129,0.14); }
-    @media (prefers-color-scheme: dark) {
-      :root { --bg:#111214; --card:#1b1c1f; --text:#ececec; --muted:#9ca3af; --line:#2c2e33; --accent:#60a5fa; --red:#f87171; --amber:#fbbf24; --green:#4ade80; --track:#2c2e33; }
-      :root { --series-1:#3987e5; --series-2:#d95926; --series-3:#199e70; --series-4:#c98500; --series-5:#d55181; --series-6:#008300; --series-7:#9085e9; --series-8:#e66767;
-              --div-mid:#383835; --grid:#2c2c2a; --axis:#383835; --provisional:rgba(137,135,129,0.20); }
-    }
-    * { box-sizing: border-box; }
-    body { margin:0; font-family: -apple-system, "Pretendard", "Malgun Gothic", sans-serif; background:var(--bg); color:var(--text); }
-    main { max-width: 1280px; margin: 0 auto; padding: 24px 16px; }
-    nav { display:flex; gap:16px; align-items:baseline; flex-wrap:wrap; margin-bottom:4px; }
-    nav h1 { font-size: 22px; margin: 0; }
-    nav a { color: var(--muted); text-decoration:none; }
-    nav a.on { color: var(--text); font-weight: 600; }
-    h2 { font-size: 17px; margin: 28px 0 10px; }
-    .meta { color: var(--muted); font-size: 14px; margin: 6px 0 16px; }
-    .bar { display:flex; flex-wrap:wrap; gap:8px; margin-bottom: 16px; align-items:center; }
-    input, select, button, .btn { font: inherit; padding: 8px 12px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--text); }
-    input[type=text] { flex: 1 1 200px; }
-    button, .btn { cursor:pointer; text-decoration:none; }
-    .primary { background: var(--accent); color:#fff; border-color: var(--accent); }
-    .err { color: var(--red); }
-    .warn { color: var(--amber); }
-    .ok { color: var(--green); }
-    .muted { color: var(--muted); }
-    .wrap { overflow-x:auto; background:var(--card); border:1px solid var(--line); border-radius:12px; }
-    table { width:100%; border-collapse: collapse; font-size: 14px; }
-    th, td { padding: 9px 12px; border-bottom: 1px solid var(--line); text-align:left; white-space: nowrap; }
-    th { background: var(--card); color: var(--muted); font-weight: 600; }
-    td.num, th.num { text-align:right; font-variant-numeric: tabular-nums; }
-    tr.cancel td { color: var(--muted); text-decoration: line-through; }
-    .tiles { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:12px; }
-    .tile { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
-    .tile .k { color: var(--muted); font-size: 13px; }
-    .tile .v { font-size: 22px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; }
-    .meter { height:6px; background:var(--track); border-radius:3px; margin-top:8px; overflow:hidden; }
-    .meter > i { display:block; height:100%; background:var(--accent); }
-    .pager { display:flex; gap:8px; align-items:center; margin-top: 12px; }
-    a { color: var(--accent); }
-    ul.notes { color: var(--muted); font-size: 14px; padding-left: 18px; line-height: 1.7; }
-    .chart { height: 340px; background: var(--card); border:1px solid var(--line); border-radius:12px; padding:8px; }
-    .chart.small { height: 220px; }
-    .cols { display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:12px; }
-    .chips { display:flex; flex-wrap:wrap; gap:6px; margin: 0 0 12px; }
-    .chip { display:inline-flex; gap:6px; align-items:center; padding:4px 8px 4px 6px; border:1px solid var(--line); border-left:4px solid var(--c); border-radius:8px; background:var(--card); font-size:14px; }
-    .chip button { padding:0 6px; border:none; background:none; color:var(--muted); }
-    .tile .d { font-size: 13px; margin-top: 2px; }
-  </style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='fonts/pretendard/pretendard.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
 <body>
-<main>
-  <nav>
-    <h1>아파트 매매 실거래가</h1>
+<header class="topbar"><div class="topbar-in">
+  <a class="brand" href="/">아파트 매매 실거래가</a>
+  <nav aria-label="주 메뉴">
     <a href="/" class="{{ 'on' if request.path == '/' }}">대시보드</a>
     <a href="/trends" class="{{ 'on' if request.path == '/trends' }}">추이</a>
     <a href="/map" class="{{ 'on' if request.path == '/map' }}">지도</a>
@@ -68,10 +18,13 @@
     <a href="/export" class="{{ 'on' if request.path == '/export' }}">추출</a>
     <a href="/trades" class="{{ 'on' if request.path == '/trades' }}">거래 목록</a>
     <a href="/status" class="{{ 'on' if request.path == '/status' }}">수집 현황</a>
-    {% if session.get('auth') %}<form method="post" action="/logout" style="margin-left:auto"><button>로그아웃</button></form>{% endif %}
   </nav>
+  {% if session.get('auth') %}<form method="post" action="/logout" class="logout"><button class="ghost small">로그아웃</button></form>{% endif %}
+</div></header>
+<main>
+  {% block page_head %}{% endblock %}
   {% if p is defined %}
-  <div class="meta">
+  <div class="status-line">
     출처: 국토교통부 실거래가 정보(공공데이터포털 Open API) ·
     누적 {{ p.trades|comma }}건 · 마지막 수집 {{ p.last_fetched or "없음" }} ·
     오늘 호출 {{ p.calls_today|comma }}/{{ p.daily_limit|comma }}
@@ -80,7 +33,7 @@
   </div>
   {% endif %}
   {% block body %}{% endblock %}
-  <p class="meta" style="margin-top:24px">지역 경계: 국토지리정보원 연속수치지형도 행정경계(읍면동), CC BY · 단지 좌표: 주소정보누리집 위치정보요약DB</p>
+  <p class="site-foot">지역 경계: 국토지리정보원 연속수치지형도 행정경계(읍면동), CC BY · 단지 좌표: 주소정보누리집 위치정보요약DB · 글꼴: Pretendard(OFL)</p>
 </main>
 {% block scripts %}{% endblock %}
 </body>

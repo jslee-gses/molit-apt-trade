@@ -1,0 +1,11 @@
+{# 화면 공통 조각. 화면 템플릿에서 {% import "_ui.html" as ui %} 로 쓴다. #}
+{% macro page_head(title, desc='') -%}
+<header class="page-head"><h1>{{ title }}</h1>{% if desc %}<p>{{ desc }}</p>{% endif %}</header>
+{%- endmacro %}
+
+{# options: [(value, label)], dots: {value: '--토큰'} (범주색 점) #}
+{% macro pills(id, options, selected, label, dots=none) -%}
+<div class="pills" id="{{ id }}" role="group" aria-label="{{ label }}">
+{%- for v, l in options %}<button type="button" class="pill" data-value="{{ v }}" aria-pressed="{{ 'true' if v == selected else 'false' }}">{% if dots and dots.get(v) %}<span class="dot" style="--dot:var({{ dots[v] }})"></span>{% endif %}{{ l }}</button>{% endfor -%}
+</div>
+{%- endmacro %}
