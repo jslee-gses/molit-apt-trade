@@ -4,7 +4,8 @@
   python -m geo.boundaries --shp <LT_C_ADEMD_INFO.shp 또는 .zip> --version 2026-10 \
       [--src-crs EPSG:5186] [--source "브이월드 LT_C_ADEMD_INFO 2026-09"]
 
-- 입력: 브이월드·국가공간정보포털에서 내려받은 읍면동 경계(속성 EMD_CD 8자리, EMD_KOR_NM).
+- 입력: 읍면동 경계. 국토지리정보원 연속수치지형도 행정경계(읍면동) N3A_G0110000(속성 BJCD 10자리·NAME, CC BY)를 쓴다.
+  EMD_CD 8자리와 EMD_KOR_NM 또는 EMD_NM을 가진 파일도 읽는다.
 - 경계 코드의 시군구(앞 5자리)가 lawd_codes.csv에 없으면 geo/code_map.csv로 바꾸고, 그래도 없으면 목록을 출력하고 멈춘다.
 - 시군구·시도 폴리곤은 읍면동을 합쳐 만든다(데이터 코드와 지도가 항상 일치).
 결과:
@@ -29,7 +30,9 @@ STATIC_GEO = settings.BASE_DIR / "static" / "geo"
 GEO_DATA = settings.BASE_DIR / "geo_data"
 CODE_MAP = settings.BASE_DIR / "geo" / "code_map.csv"
 METRIC_CRS = "EPSG:5179"
-TOLERANCE_M = {"assign": 5, "umd": 30, "sgg": 80, "sido": 200}   # 단순화 허용 오차(m)
+TOLERANCE_M = {"assign": 5, "umd": 30, "sgg": 200, "sido": 500}   # 단순화 허용 오차(m)
+# 화면용에서만 뺄 작은 섬(㎡). 판정용(assign)은 모두 남긴다. 가장 큰 조각은 항상 남긴다.
+MIN_PART_M2 = {"umd": 1e4, "sgg": 1e5, "sido": 5e5}
 
 
 class UnknownCodes(Exception):
@@ -57,7 +60,11 @@ def load_emd(path, src_crs=None, encoding=None):
         if not src_crs:
             raise SystemExit("경계 파일에 좌표계(.prj)가 없습니다. --src-crs로 지정하세요(예: EPSG:5186).")
         gdf = gdf.set_crs(src_crs)
-    gdf = gdf.rename(columns={"emd_kor_nm": "name"})
+    # 국토지리정보원: BJCD(법정동 10자리)·NAME / 국토교통부·브이월드: EMD_CD·EMD_KOR_NM 또는 EMD_NM
+    if "emd_cd" not in gdf.columns and "bjcd" in gdf.columns:
+        gdf["emd_cd"] = gdf["bjcd"].astype(str).str.strip().str[:8]
+    if "name" not in gdf.columns:
+        gdf = gdf.rename(columns={"emd_kor_nm": "name"} if "emd_kor_nm" in gdf.columns else {"emd_nm": "name"})
     gdf["emd_cd"] = gdf["emd_cd"].astype(str).str.strip().str.zfill(8)
     gdf = gdf.rename_geometry("geometry") if geom != "geometry" else gdf
     gdf = gdf[["emd_cd", "name", "geometry"]].copy()
@@ -77,9 +84,22 @@ def read_code_map(path=CODE_MAP):
     return dict(zip(df["old_emd_cd"].str.strip().str.zfill(8), df["new_emd_cd"].str.strip().str.zfill(8)))
 
 
-def normalize_codes(emd, valid_sgg, code_map):
+def read_code_names(path=CODE_MAP):
+    """code_map.csv의 new_name(있으면): 새 코드 → 새 이름(개편으로 이름도 바뀐 동)."""
+    if not Path(path).exists():
+        return {}
+    df = pd.read_csv(path, dtype=str, keep_default_na=False)
+    if "new_name" not in df.columns:
+        return {}
+    df = df[df["new_name"].str.strip() != ""]
+    return dict(zip(df["new_emd_cd"].str.strip().str.zfill(8), df["new_name"].str.strip()))
+
+
+def normalize_codes(emd, valid_sgg, code_map, names=None):
     out = emd.copy()
     out["emd_cd"] = out["emd_cd"].map(lambda c: code_map.get(c, c))
+    if names:
+        out["name"] = [names.get(c, n) for c, n in zip(out["emd_cd"], out["name"])]
     unknown = set(out.loc[~out["emd_cd"].str[:5].isin(valid_sgg), "emd_cd"])
     if unknown:
         raise UnknownCodes(unknown)
@@ -91,6 +111,23 @@ def _simplify(gdf, meters):
     out = gdf.copy()
     out["geometry"] = out.geometry.simplify(meters, preserve_topology=True)
     return out
+
+
+def _drop_specks(gdf, min_area):
+    """여러 조각 중 min_area(㎡)보다 작은 조각(작은 섬)을 뺀다. 가장 큰 조각은 남긴다."""
+    def keep(g):
+        parts = list(getattr(g, "geoms", [g]))
+        if len(parts) < 2:
+            return g
+        big = [p for p in parts if p.area >= min_area] or [max(parts, key=lambda p: p.area)]
+        return big[0] if len(big) == 1 else shapely.MultiPolygon(big)
+    out = gdf.copy()
+    out["geometry"] = gpd.GeoSeries([keep(g) for g in out.geometry], index=out.index, crs=out.crs)
+    return out
+
+
+def _display(gdf, level):
+    return _to_web(_simplify(_drop_specks(gdf, MIN_PART_M2[level]), TOLERANCE_M[level]))
 
 
 def _to_web(gdf):
@@ -147,12 +184,10 @@ def build(emd, codes_df, version, source, static_dir=None, data_dir=None):
     sido["name"] = sido["region_cd"].map(sido_names)
     sido["full_name"] = sido["name"]
 
-    _write_geojson(_to_web(_simplify(sido, TOLERANCE_M["sido"])), static_dir / "sido.json", ["region_cd", "name"])
-    _write_geojson(_to_web(_simplify(sgg, TOLERANCE_M["sgg"])), static_dir / "sgg.json",
-                   ["region_cd", "name", "sido_cd"])
+    _write_geojson(_display(sido, "sido"), static_dir / "sido.json", ["region_cd", "name"])
+    _write_geojson(_display(sgg, "sgg"), static_dir / "sgg.json", ["region_cd", "name", "sido_cd"])
     for sido_cd, part in umd.groupby("sido_cd"):
-        _write_geojson(_to_web(_simplify(part, TOLERANCE_M["umd"])), static_dir / f"umd_{sido_cd}.json",
-                       ["region_cd", "name", "sgg_cd"])
+        _write_geojson(_display(part, "umd"), static_dir / f"umd_{sido_cd}.json", ["region_cd", "name", "sgg_cd"])
     _write_geojson(_to_web(_simplify(umd, TOLERANCE_M["assign"])), data_dir / "umd_assign.geojson.gz",
                    ["region_cd", "sgg_cd"], gz=True)
 
@@ -187,7 +222,7 @@ def main(argv=None):
     codes_df = lawd.load_codes()
     emd = load_emd(args.shp, args.src_crs, args.encoding)
     try:
-        emd = normalize_codes(emd, set(codes_df["LAWD_CD"]), read_code_map())
+        emd = normalize_codes(emd, set(codes_df["LAWD_CD"]), read_code_map(), read_code_names())
     except UnknownCodes as e:
         print(f"{e}. geo/code_map.csv에 '옛 코드,새 코드'를 추가하거나 lawd_codes.csv를 확인하세요:")
         for c in e.codes:

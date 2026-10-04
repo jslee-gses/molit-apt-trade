@@ -33,6 +33,15 @@ def test_normalize_dissolves_pieces_and_maps_codes():
     assert out.set_index("emd_cd").loc["11110102"].geometry.geom_type == "MultiPolygon"
 
 
+def test_code_map_new_name_overrides(tmp_path):
+    path = tmp_path / "map.csv"
+    path.write_text("old_emd_cd,new_emd_cd,old_name,new_name\n11999101,11140101,옛무교동,무교동\n", encoding="utf-8")
+    code_map, names = boundaries.read_code_map(path), boundaries.read_code_names(path)
+    emd = emd_frame(ROWS[:1] + [("11999101", "옛무교동", 1, -2)])
+    out = boundaries.normalize_codes(emd, {"11110", "11140"}, code_map, names)
+    assert out.set_index("emd_cd").loc["11140101", "name"] == "무교동"
+
+
 def test_unknown_codes_stop_with_list():
     emd = emd_frame(ROWS + [("99999101", "어딘가", 5, 5)])
     with pytest.raises(boundaries.UnknownCodes) as e:
@@ -69,6 +78,22 @@ def test_build_writes_files(tmp_path):
     assert len(regions) == 6
 
 
+def test_display_drops_tiny_islands_but_assign_keeps_them(tmp_path):
+    speck = box(X0 + 5000, Y0 + 5000, X0 + 5010, Y0 + 5010)    # 100㎡ 섬
+    emd = boundaries.normalize_codes(emd_frame(ROWS), {"11110", "11140"}, {})
+    i = emd.index[emd["emd_cd"] == "11110101"][0]
+    emd.loc[i, "geometry"] = emd.loc[i, "geometry"].union(speck)
+    boundaries.build(emd, codes.load_codes(), "2026-10", "t", tmp_path / "s", tmp_path / "d")
+
+    def parts(features, code):
+        g = next(f["geometry"] for f in features if f["properties"]["region_cd"] == code)
+        return 1 if g["type"] == "Polygon" else len(g["coordinates"])
+    umd = json.loads((tmp_path / "s" / "2026-10" / "umd_11.json").read_text(encoding="utf-8"))["features"]
+    assign = json.loads(gzip.decompress((tmp_path / "d" / "2026-10" / "umd_assign.geojson.gz").read_bytes()))
+    assert parts(umd, "11110101") == 1
+    assert parts(assign["features"], "11110101") == 2
+
+
 def test_load_emd_reads_file_and_lowercases(tmp_path):
     src = emd_frame(ROWS).rename(columns={"emd_cd": "EMD_CD", "name": "EMD_KOR_NM"})
     path = tmp_path / "emd.gpkg"
@@ -76,6 +101,27 @@ def test_load_emd_reads_file_and_lowercases(tmp_path):
     out = boundaries.load_emd(path)
     assert list(out.columns) == ["emd_cd", "name", "geometry"]
     assert out.crs.to_epsg() == 5179
+
+
+def test_load_emd_reads_ngii_bjcd(tmp_path):
+    """국토지리정보원 연속수치지형도 행정경계: BJCD(법정동 10자리)·NAME."""
+    src = emd_frame(ROWS).rename(columns={"name": "NAME"})
+    src["BJCD"] = src.pop("emd_cd") + "00"
+    src["UFID"] = "u"
+    path = tmp_path / "ngii.gpkg"
+    src.to_file(path)
+    out = boundaries.load_emd(path)
+    assert list(out.columns) == ["emd_cd", "name", "geometry"]
+    assert sorted(set(out["emd_cd"])) == ["11110101", "11110102", "11140101"]
+    assert out.set_index("emd_cd").loc["11110101", "name"] == "청운동"
+
+
+def test_load_emd_reads_emd_nm(tmp_path):
+    """국토교통부 행정구역_읍면동: EMD_CD·EMD_NM."""
+    src = emd_frame(ROWS).rename(columns={"emd_cd": "EMD_CD", "name": "EMD_NM"})
+    path = tmp_path / "lsmd.gpkg"
+    src.to_file(path)
+    assert boundaries.load_emd(path)["name"].tolist()[0] == "청운동"
 
 
 def test_main_reports_unknown_codes(tmp_path, capsys, monkeypatch):

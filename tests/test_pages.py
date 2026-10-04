@@ -24,6 +24,7 @@ def test_dashboard(client, seeded):
     html = client.get("/").get_data(as_text=True)
     assert 'id="kpis"' in html and "echarts.min.js" in html and "js/dashboard.js" in html
     assert 'href="/trends"' in html and 'href="/map"' in html and 'href="/export"' in html
+    assert "국토지리정보원" in html and "CC BY" in html    # 경계 출처 표시(라이선스 조건)
 
 
 def test_trades_list_moved(client, seeded):
