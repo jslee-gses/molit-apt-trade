@@ -9,10 +9,12 @@
     return;
   }
   const { kpi, series, movers } = data;
-  const delta = (v) => `<div class="d ${v == null ? 'muted' : v >= 0 ? 'err' : 'ok'}">전년 동월 대비 ${App.fmt.pct(v)}</div>`;
+  // 증감 배지: 색(상승 빨강·하락 파랑) + 화살표·부호를 함께 보여 색만으로 전하지 않는다
+  const badge = (v, prefix = '') => (v == null ? `<span class="badge">${prefix}-</span>`
+    : `<span class="badge ${v >= 0 ? 'up' : 'down'}">${prefix}${v >= 0 ? '▲' : '▼'} ${App.fmt.pct(v)}</span>`);
   el('kpis').innerHTML = `
-    <div class="tile"><div class="k">${App.fmt.ym(kpi.ym)} 거래량 (확정)</div><div class="v">${App.fmt.int(kpi.n)}건</div>${delta(kpi.yoy_n)}</div>
-    <div class="tile"><div class="k">${App.fmt.ym(kpi.ym)} 전국 중위 거래가</div><div class="v">${App.fmt.eok(kpi.median)}</div>${delta(kpi.yoy_median)}</div>
+    <div class="tile"><div class="k">${App.fmt.ym(kpi.ym)} 거래량 (확정)</div><div class="v">${App.fmt.int(kpi.n)}건</div><div class="d">${badge(kpi.yoy_n, '전년 동월 대비 ')}</div></div>
+    <div class="tile"><div class="k">${App.fmt.ym(kpi.ym)} 전국 중위 거래가</div><div class="v">${App.fmt.eok(kpi.median)}</div><div class="d">${badge(kpi.yoy_median, '전년 동월 대비 ')}</div></div>
     <div class="tile"><div class="k">경계 버전</div><div class="v">${App.escapeHtml(data.version)}</div></div>`;
 
   const labels = series.map((s) => App.fmt.ym(s.ym));
@@ -40,10 +42,11 @@
     series: [{ name: '중위 거래가', type: 'line', data: series.map((s) => s.median), color, symbol: 'none', lineStyle: { width: 2 }, markArea: prov }],
   });
 
-  el('mover-note').textContent = `(${App.fmt.ym(movers.window[0])}~${App.fmt.ym(movers.window[1])} vs 전년 같은 기간, 두 기간 모두 ${movers.min_trades}건 이상) · 중위가는 월별 중위가의 거래량 가중평균`;
-  const table = (rows, title) => `<thead><tr><th>${title}</th><th class="num">전년 대비</th><th class="num">중위가</th><th class="num">거래</th></tr></thead><tbody>${
-    rows.length ? rows.map((m) => `<tr><td><a href="/trends?regions=sgg:${m.region_cd}">${App.escapeHtml(m.name)}</a></td><td class="num">${App.fmt.pct(m.yoy)}</td><td class="num">${App.fmt.eok(m.median)}</td><td class="num">${App.fmt.int(m.n)}</td></tr>`).join('')
-      : '<tr><td colspan="4" class="muted">해당 시군구 없음</td></tr>'}</tbody>`;
-  el('up').innerHTML = table(movers.up, '상승 상위');
-  el('down').innerHTML = table(movers.down, '하락 상위');
+  el('mover-note').textContent = `${App.fmt.ym(movers.window[0])}~${App.fmt.ym(movers.window[1])} vs 전년 같은 기간 · 두 기간 모두 ${movers.min_trades}건 이상 · 중위가는 월별 중위가의 거래량 가중평균`;
+  const list = (rows) => (rows.length ? rows.map((m, i) => `<li><a class="rank-item" href="/trends?regions=sgg:${m.region_cd}">`
+    + `<span class="rank-no">#${i + 1}</span>`
+    + `<span class="rank-name"><b>${App.escapeHtml(m.name)}</b><small>중위 ${App.fmt.eok(m.median)} · 거래 ${App.fmt.int(m.n)}건</small></span>`
+    + `${badge(m.yoy)}</a></li>`).join('') : '<li class="rank-empty">해당 시군구 없음</li>');
+  el('up').innerHTML = list(movers.up);
+  el('down').innerHTML = list(movers.down);
 })();
