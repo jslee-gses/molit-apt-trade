@@ -35,8 +35,15 @@ def test_token_contrast(theme):
     t = _themes()[theme]
     for fg, bg in [("text", "bg"), ("text", "card"), ("muted", "bg"), ("muted", "card"),
                    ("ink", "card"), ("ink", "bg"), ("on-ink", "ink"),
-                   ("up", "soft"), ("down", "soft"), ("up", "card"), ("down", "card")]:
+                   ("up", "soft"), ("down", "soft"), ("up", "card"), ("down", "card"),
+                   ("amber", "soft"), ("muted", "soft")]:
         assert _ratio(t[fg], t[bg]) >= 4.5, f"{fg} on {bg}: {_ratio(t[fg], t[bg]):.2f}"
+
+
+@pytest.mark.parametrize("theme", [0, 1], ids=["light", "dark"])
+def test_nodata_distinct_from_lowest_band(theme):
+    t = _themes()[theme]
+    assert _ratio(t["nodata"], t["seq-100"]) >= 1.3
 
 
 def test_base_uses_self_hosted_assets(client):

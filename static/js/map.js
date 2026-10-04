@@ -31,6 +31,7 @@
   let seq = 0;
   let miniSeq = 0;
   let data = null;
+  let sideCode = null;
   let selected = null;   // 순위에서 고른 지역 코드
   let sort = null;       // 비교표 정렬 { field, dir }. null이면 현재 지표 내림차순
 
@@ -64,7 +65,7 @@
     return { min: Math.min(...nums), max: Math.max(...nums) };
   }
   function colorFor(v, kind, sc) {
-    if (v == null || !sc) return App.css('--track');
+    if (v == null || !sc) return App.css('--nodata');
     const stops = RAMP[kind];
     const t = sc.max === sc.min ? 1 : (v - sc.min) / (sc.max - sc.min);
     return App.css(stops[Math.round(Math.max(0, Math.min(1, t)) * (stops.length - 1))]);
@@ -93,6 +94,7 @@
       const fc = await geo(apiData.version, apiData.level, apiData.parent);
       if (my !== seq) return;
       data = apiData;
+      if (el('side').hidden === false && !data.values.some((v) => v.region_cd === sideCode)) el('side-drill').hidden = true;
       if (selected && !data.values.some((v) => v.region_cd === selected)) { selected = null; el('side').hidden = true; }
       state.from = data.from; state.to = data.to;
       el('from').value = App.toMonthInput(data.from);
@@ -130,7 +132,7 @@
           return { name: v.region_cd, value: v[field], raw: v, itemStyle: { areaColor: c },
             emphasis: { itemStyle: { areaColor: c } }, select: { itemStyle: { areaColor: c } } };
         }),
-        itemStyle: { areaColor: App.css('--track'), borderColor: App.css('--card'), borderWidth: 1 },
+        itemStyle: { areaColor: App.css('--nodata'), borderColor: App.css('--card'), borderWidth: 1 },
         emphasis: { label: { show: true, color: App.css('--text'), formatter: (p) => p.data?.raw?.name ?? '' },
           itemStyle: { borderColor: App.css('--ink'), borderWidth: 2 } },
         select: { label: { show: true, color: App.css('--text'), formatter: (p) => p.data?.raw?.name ?? '' },
@@ -224,6 +226,7 @@
     const level = data.level, to = data.to;
     const key = `${level}:${v.region_cd}`;
     el('side').hidden = false;
+    sideCode = v.region_cd;
     mini.resize();
     el('side-name').textContent = `${v.full_name} · 중위 거래가 최근 36개월`;
     el('side-link').href = `/trends?regions=${encodeURIComponent(key)}&band=${encodeURIComponent(state.band)}`;

@@ -114,7 +114,7 @@ const App = (() => {
   // 증감 막대: 가운데 기준, 상승 = 오른쪽 빨강, 하락 = 왼쪽 파랑
   function divBarCell(v, maxAbs, text) {
     let bar = '';
-    if (v != null && maxAbs) {
+    if (v != null && maxAbs && Math.abs(v) >= 0.05) {
       const w = Math.max(2, Math.round((50 * Math.min(Math.abs(v), maxAbs)) / maxAbs));
       bar = v >= 0 ? `<i style="left:50%;width:${w}%;background:var(--div-pos-2)"></i>`
         : `<i style="left:${50 - w}%;width:${w}%;background:var(--div-neg-2)"></i>`;

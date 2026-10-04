@@ -11,6 +11,7 @@
   const { kpi, series, movers } = data;
   // 증감 배지: 색(상승 빨강·하락 파랑) + 화살표·부호를 함께 보여 색만으로 전하지 않는다
   const badge = (v, prefix = '') => (v == null ? `<span class="badge">${prefix}-</span>`
+    : Math.abs(v) < 0.05 ? `<span class="badge">${prefix}0.0%</span>`
     : `<span class="badge ${v >= 0 ? 'up' : 'down'}">${prefix}${v >= 0 ? '▲' : '▼'} ${App.fmt.pct(v)}</span>`);
   el('kpis').innerHTML = `
     <div class="tile"><div class="k">${App.fmt.ym(kpi.ym)} 거래량 (확정)</div><div class="v">${App.fmt.int(kpi.n)}건</div><div class="d">${badge(kpi.yoy_n, '전년 동월 대비 ')}</div></div>

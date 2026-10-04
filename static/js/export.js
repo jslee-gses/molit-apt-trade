@@ -4,7 +4,7 @@
   const form = el('export-form');
   // 알약 선택값은 같은 이름의 숨은 입력(target, band)으로 폼에 실린다. 형식은 폼 주소로 고른다.
   const targetPills = App.pills(el('target'), (v) => { el('target-v').value = v; });
-  App.pills(el('band'), (v) => { el('band-v').value = v; });
+  const bandPills = App.pills(el('band'), (v) => { el('band-v').value = v; });
   const formatPills = App.pills(el('format'));
   async function fill(sel, level, parent, placeholder) {
     sel.innerHTML = '';
@@ -27,6 +27,8 @@
   el('from').value = App.toMonthInput(App.shiftYm(thisYm, -11));
 
   form.onsubmit = () => {
+    el('target-v').value = targetPills.value;
+    el('band-v').value = bandPills.value;
     const umd = el('sel-umd').value, sgg = el('sel-sgg').value, sido = el('sel-sido').value;
     el('region').value = umd ? `umd:${umd}` : sgg ? `sgg:${sgg}` : sido ? `sido:${sido}` : '';
     el('region').disabled = !el('region').value;
