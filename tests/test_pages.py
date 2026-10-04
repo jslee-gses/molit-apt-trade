@@ -41,6 +41,10 @@ def test_trends_page(client, seeded):
 def test_map_page(client, seeded):
     html = client.get("/map").get_data(as_text=True)
     assert 'id="map"' in html and 'id="ranking"' in html and "js/map.js" in html
+    assert '<header class="page-head">' in html
+    assert 'id="compare"' in html and 'class="data-table"' in html and 'id="rank-q"' in html
+    assert 'data-value="yoy_n" aria-pressed="false"' in html and 'data-value="median_price" aria-pressed="true"' in html
+    assert 'data-value="le60"' in html and "<select" not in html
 
 
 def test_complexes_search_page(client, seeded):

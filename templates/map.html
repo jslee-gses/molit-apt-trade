@@ -1,30 +1,41 @@
 {% extends "base.html" %}
+{% import "_ui.html" as ui %}
 {% block title %}지도 · 아파트 실거래가{% endblock %}
+{% block page_head %}{{ ui.page_head('지역 지도', '시도에서 읍면동까지 단계구분도로 보고, 지역 순위와 지표를 한 화면에서 비교합니다.') }}{% endblock %}
 {% block body %}
-<div class="bar">
-  <span id="crumbs"></span>
-  <select id="metric" aria-label="지표">
-    <option value="median_price">중위 거래가</option>
-    <option value="median_ppm2">㎡당 중위가</option>
-    <option value="n_trades">거래량</option>
-    <option value="yoy_price">중위가 전년 대비</option>
-    <option value="yoy_n">거래량 전년 대비</option>
-  </select>
-  <select id="band" aria-label="면적 구간">{% for v, l in bands %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select>
-  <input type="month" id="from" aria-label="시작월"> ~ <input type="month" id="to" aria-label="종료월">
-</div>
+{% set metrics = [('median_price', '중위 거래가'), ('median_ppm2', '㎡당 중위가'), ('n_trades', '거래량'),
+                  ('yoy_price', '중위가 전년 대비'), ('yoy_n', '거래량 전년 대비')] %}
+{% set dots = {'median_price': '--m-price', 'median_ppm2': '--m-ppm2', 'n_trades': '--m-count',
+               'yoy_price': '--m-yoy', 'yoy_n': '--m-yoy'} %}
+<section class="card filters">
+  <div class="filter-row"><span class="filter-label">지표</span>{{ ui.pills('metric', metrics, 'median_price', '지표', dots) }}</div>
+  <div class="filter-row"><span class="filter-label">면적</span>{{ ui.pills('band', bands, 'all', '면적 구간') }}</div>
+  <div class="filter-row"><span class="filter-label">기간</span>
+    <input type="month" id="from" aria-label="시작월"> ~ <input type="month" id="to" aria-label="종료월">
+    <nav id="crumbs" class="crumbs" aria-label="지역 경로"></nav></div>
+</section>
 <p id="msg" class="meta"></p>
-<div class="cols">
-  <div id="map" class="chart" style="height:520px"></div>
-  <div>
-    <div id="side" class="tile" hidden>
-      <div class="k" id="side-name"></div>
+<div class="map-layout">
+  <section class="card map-card"><div id="map" class="chart chart-map"></div></section>
+  <section class="card rank-card">
+    <h2 class="card-title" id="rank-title">순위</h2>
+    <div id="side" class="side" hidden>
+      <div class="side-head"><b id="side-name"></b>
+        <span class="toolbar"><a id="side-link" href="#">추이에서 보기</a>
+          <button type="button" id="side-drill" class="ghost small" hidden>하위 지역 보기</button></span></div>
       <div id="mini" class="chart small"></div>
-      <a id="side-link" href="#">추이에서 보기</a>
     </div>
-    <div class="wrap" style="max-height:520px;overflow:auto;margin-top:12px"><table id="ranking"></table></div>
-  </div>
+    <input type="search" id="rank-q" placeholder="지역 검색" aria-label="순위에서 지역 검색">
+    <div class="legend-bar"><span class="ramp" id="legend-ramp"></span>
+      <span class="legend-ends"><span id="legend-lo"></span><span id="legend-hi"></span></span></div>
+    <ol id="ranking" class="rank-list"></ol>
+  </section>
 </div>
-<p class="meta" id="note"></p>
+<section class="card">
+  <h2 class="card-title">지표 비교</h2>
+  <p class="card-sub">열 머리를 누르면 정렬합니다. 지역 이름을 누르면 추이 화면으로 갑니다.</p>
+  <div class="table-wrap"><table id="compare" class="data-table"></table></div>
+  <p class="table-foot" id="note"></p>
+</section>
 {% endblock %}
 {% block scripts %}{% include "_charts.html" %}<script src="{{ url_for('static', filename='js/map.js') }}"></script>{% endblock %}
