@@ -11,13 +11,13 @@
 <header class="topbar"><div class="topbar-in">
   <a class="brand" href="/">아파트 매매 실거래가</a>
   <nav aria-label="주 메뉴">
-    <a href="/" class="{{ 'on' if request.path == '/' }}">대시보드</a>
-    <a href="/trends" class="{{ 'on' if request.path == '/trends' }}">추이</a>
-    <a href="/map" class="{{ 'on' if request.path == '/map' }}">지도</a>
-    <a href="/complexes" class="{{ 'on' if request.path.startswith('/complexes') }}">단지</a>
-    <a href="/export" class="{{ 'on' if request.path == '/export' }}">추출</a>
-    <a href="/trades" class="{{ 'on' if request.path == '/trades' }}">거래 목록</a>
-    <a href="/status" class="{{ 'on' if request.path == '/status' }}">수집 현황</a>
+    <a href="/" class="{{ 'on' if request.path == '/' }}"{% if request.path == '/' %} aria-current="page"{% endif %}>대시보드</a>
+    <a href="/trends" class="{{ 'on' if request.path == '/trends' }}"{% if request.path == '/trends' %} aria-current="page"{% endif %}>추이</a>
+    <a href="/map" class="{{ 'on' if request.path == '/map' }}"{% if request.path == '/map' %} aria-current="page"{% endif %}>지도</a>
+    <a href="/complexes" class="{{ 'on' if request.path.startswith('/complexes') }}"{% if request.path.startswith('/complexes') %} aria-current="page"{% endif %}>단지</a>
+    <a href="/export" class="{{ 'on' if request.path == '/export' }}"{% if request.path == '/export' %} aria-current="page"{% endif %}>추출</a>
+    <a href="/trades" class="{{ 'on' if request.path == '/trades' }}"{% if request.path == '/trades' %} aria-current="page"{% endif %}>거래 목록</a>
+    <a href="/status" class="{{ 'on' if request.path == '/status' }}"{% if request.path == '/status' %} aria-current="page"{% endif %}>수집 현황</a>
   </nav>
   {% if session.get('auth') %}<form method="post" action="/logout" class="logout"><button class="ghost small">로그아웃</button></form>{% endif %}
 </div></header>

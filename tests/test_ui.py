@@ -34,7 +34,8 @@ def _ratio(a, b):
 def test_token_contrast(theme):
     t = _themes()[theme]
     for fg, bg in [("text", "bg"), ("text", "card"), ("muted", "bg"), ("muted", "card"),
-                   ("ink", "card"), ("ink", "bg"), ("on-ink", "ink")]:
+                   ("ink", "card"), ("ink", "bg"), ("on-ink", "ink"),
+                   ("up", "soft"), ("down", "soft"), ("up", "card"), ("down", "card")]:
         assert _ratio(t[fg], t[bg]) >= 4.5, f"{fg} on {bg}: {_ratio(t[fg], t[bg]):.2f}"
 
 
@@ -45,6 +46,7 @@ def test_base_uses_self_hosted_assets(client):
     assert all(h.startswith("/static/") for h in re.findall(r'<link[^>]+href="([^"]+)"', html))
     assert all(s.startswith("/static/") or s.startswith("https://cdnjs.cloudflare.com/ajax/libs/echarts/")
                for s in re.findall(r'<script[^>]+src="([^"]+)"', html))
+    assert 'href="/status" class="on" aria-current="page"' in html
     assert "국토지리정보원" in html and "CC BY" in html
 
 
