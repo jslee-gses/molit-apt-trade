@@ -38,7 +38,9 @@ def test_trades_list_moved(client, seeded):
 def test_trends_page(client, seeded):
     html = client.get("/trends").get_data(as_text=True)
     assert 'id="chart"' in html and "js/trends.js" in html
-    assert '<option value="le60">60㎡ 이하</option>' in html
+    assert '<header class="page-head">' in html
+    assert 'data-value="le60" aria-pressed="false"' in html and 'data-value="range"' in html
+    assert 'id="metric" role="group"' in html and 'id="band" role="group"' in html
 
 
 def test_map_page(client, seeded):

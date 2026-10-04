@@ -1,31 +1,35 @@
 {% extends "base.html" %}
+{% import "_ui.html" as ui %}
 {% block title %}추이 · 아파트 실거래가{% endblock %}
+{% block page_head %}{{ ui.page_head('지역별 추이', '지역을 최대 8개까지 골라 월별 중위 거래가·㎡당가·거래량을 비교합니다.') }}{% endblock %}
 {% block body %}
-<div class="bar">
-  <select id="sel-sido" aria-label="시도"></select>
-  <select id="sel-sgg" aria-label="시군구"></select>
-  <select id="sel-umd" aria-label="읍면동"></select>
-  <button id="add" class="primary">지역 추가</button>
-  <span class="muted">최대 8개 · 아무것도 고르지 않고 추가하면 전국</span>
-</div>
-<div id="chips" class="chips"></div>
-<div class="bar">
-  <select id="metric" aria-label="지표">
-    <option value="median_price">중위 거래가</option>
-    <option value="median_ppm2">㎡당 중위가</option>
-    <option value="n_trades">거래량</option>
-    <option value="range">25~75% 범위 (지역 1개)</option>
-  </select>
-  <select id="band" aria-label="면적 구간">{% for v, l in bands %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select>
-  <input type="month" id="from" aria-label="시작월"> ~ <input type="month" id="to" aria-label="종료월">
-  <label class="muted"><input type="checkbox" id="ma"> 3개월 이동평균</label>
-  <label class="muted"><input type="checkbox" id="idx"> 시작월=100 지수</label>
-  <button id="toggle-table">표 보기</button>
-  <button id="png">PNG 저장</button>
-</div>
+{% set metrics = [('median_price', '중위 거래가'), ('median_ppm2', '㎡당 중위가'), ('n_trades', '거래량'), ('range', '25~75% 범위 (지역 1개)')] %}
+{% set dots = {'median_price': '--m-price', 'median_ppm2': '--m-ppm2', 'n_trades': '--m-count', 'range': '--m-price'} %}
+<section class="card filters">
+  <div class="filter-row"><span class="filter-label">지역</span>
+    <select id="sel-sido" aria-label="시도"></select>
+    <select id="sel-sgg" aria-label="시군구"></select>
+    <select id="sel-umd" aria-label="읍면동"></select>
+    <button type="button" id="add" class="primary">지역 추가</button>
+    <span class="muted">최대 8개 · 아무것도 고르지 않고 추가하면 전국</span></div>
+  <div id="chips" class="chips"></div>
+  <div class="filter-row"><span class="filter-label">지표</span>{{ ui.pills('metric', metrics, 'median_price', '지표', dots) }}</div>
+  <div class="filter-row"><span class="filter-label">면적</span>{{ ui.pills('band', bands, 'all', '면적 구간') }}</div>
+  <div class="filter-row"><span class="filter-label">기간</span>
+    <input type="month" id="from" aria-label="시작월"> ~ <input type="month" id="to" aria-label="종료월"></div>
+</section>
 <p id="msg" class="meta"></p>
-<div id="chart" class="chart"></div>
-<p class="meta">음영 구간은 신고기한(30일)이 지나지 않은 잠정 자료입니다. 해제 거래는 제외했고, 거래가 없는 달은 선이 끊깁니다.</p>
-<div id="table" class="wrap" hidden></div>
+<section class="card">
+  <div class="card-head"><h2 class="card-title" id="chart-title">추이</h2>
+    <div class="toolbar">
+      <label class="check"><input type="checkbox" id="ma"> 3개월 이동평균</label>
+      <label class="check"><input type="checkbox" id="idx"> 시작월=100 지수</label>
+      <button type="button" id="toggle-table" class="ghost small">표 보기</button>
+      <button type="button" id="png" class="ghost small">PNG 저장</button>
+    </div></div>
+  <div id="chart" class="chart"></div>
+  <p class="meta">음영 구간은 신고기한(30일)이 지나지 않은 잠정 자료입니다. 해제 거래는 제외했고, 거래가 없는 달은 선이 끊깁니다.</p>
+  <div id="table" class="table-wrap" hidden></div>
+</section>
 {% endblock %}
 {% block scripts %}{% include "_charts.html" %}<script src="{{ url_for('static', filename='js/trends.js') }}"></script>{% endblock %}

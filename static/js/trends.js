@@ -15,13 +15,13 @@
     .map((key, slot) => ({ key, name: key, slot }));
   let last = null;
 
-  // 지표/면적 검증
-  if (!(state.metric in METRICS)) state.metric = 'median_price';
-  if (![...el('band').options].some((o) => o.value === state.band)) state.band = 'all';
-
-  // 컨트롤 초기값
-  el('metric').value = state.metric;
-  el('band').value = state.band;
+  // 지표·면적: 알약. 사용자가 바꾸면 다시 그린다.
+  const metricPills = App.pills(el('metric'), () => render());
+  const bandPills = App.pills(el('band'), () => render());
+  if (!Object.hasOwn(METRICS, state.metric)) state.metric = 'median_price';
+  if (!bandPills.has(state.band)) state.band = 'all';
+  metricPills.value = state.metric;
+  bandPills.value = state.band;
   el('ma').checked = state.ma === '1';
   el('idx').checked = state.idx === '1';
 
@@ -56,7 +56,7 @@
     el('chips').querySelectorAll('button').forEach((b) => { b.onclick = () => { picked = picked.filter((p) => p.key !== b.dataset.key); render(); }; });
   }
 
-  for (const id of ['metric', 'band', 'ma', 'idx', 'from', 'to']) el(id).onchange = () => render();
+  for (const id of ['ma', 'idx', 'from', 'to']) el(id).onchange = () => render();
 
   function movingAvg(vals, n) {
     return vals.map((_, i) => {
@@ -67,8 +67,8 @@
   }
 
   function readControls() {
-    state.metric = el('metric').value;
-    state.band = el('band').value;
+    state.metric = metricPills.value;
+    state.band = bandPills.value;
     state.ma = el('ma').checked ? '1' : '';
     state.idx = el('idx').checked ? '1' : '';
     state.from = App.fromMonthInput(el('from').value) || state.from;
@@ -117,6 +117,7 @@
     const months = App.monthRange(last.from, last.to);
     const labels = months.map(App.fmt.ym);
     const [title, f] = METRICS[state.metric];
+    el('chart-title').textContent = state.idx ? `${title} (시작월=100)` : title;
     const yfmt = state.idx ? (v) => v.toFixed(1) : f;
     const base = App.baseOption();
     const series = [];
@@ -166,12 +167,12 @@
     if (state.metric === 'range') {
       const s = last.series[0];
       const by = Object.fromEntries(s.points.map((pt) => [pt.ym, pt]));
-      el('table').innerHTML = `<table><thead><tr><th>계약월</th><th class="num">25%</th><th class="num">중위</th><th class="num">75%</th><th class="num">거래</th></tr></thead><tbody>${
+      el('table').innerHTML = `<table class="data-table"><thead><tr><th>계약월</th><th class="num">25%</th><th class="num">중위</th><th class="num">75%</th><th class="num">거래</th></tr></thead><tbody>${
         months.map((m) => `<tr><td>${App.fmt.ym(m)}</td><td class="num">${App.fmt.eok(by[m]?.p25_price)}</td><td class="num">${App.fmt.eok(by[m]?.median_price)}</td><td class="num">${App.fmt.eok(by[m]?.p75_price)}</td><td class="num">${App.fmt.int(by[m]?.n_trades)}</td></tr>`).join('')}</tbody></table>`;
       return;
     }
     const cols = last.series.map((s) => valuesFor(s, months).vals);
-    el('table').innerHTML = `<table><thead><tr><th>계약월</th>${last.series.map((s) => `<th class="num">${App.escapeHtml(s.name)}</th>`).join('')}</tr></thead><tbody>${
+    el('table').innerHTML = `<table class="data-table"><thead><tr><th>계약월</th>${last.series.map((s) => `<th class="num">${App.escapeHtml(s.name)}</th>`).join('')}</tr></thead><tbody>${
       months.map((m, i) => `<tr><td>${App.fmt.ym(m)}</td>${cols.map((c) => `<td class="num">${c[i] == null ? '-' : yfmt(c[i])}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
   }
 
