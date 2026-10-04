@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 {% block title %}수집 현황 · 아파트 실거래가{% endblock %}
+{% import "_ui.html" as ui %}
+{% block page_head %}{{ ui.page_head('수집 현황', '수집 진행, 누락·오류 점검, 단지 좌표와 월별 집계 상태를 봅니다.') }}{% endblock %}
 {% block body %}
 {% set done = p.by_status.get('done', 0) %}
 <div class="tiles">

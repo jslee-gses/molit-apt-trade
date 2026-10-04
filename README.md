@@ -104,6 +104,11 @@ DATABASE_URL=postgresql://USER:PASS@localhost:5432/molit_seed .venv/Scripts/pyth
 ```
 먼저 `molit_seed` DB를 따로 만드세요. `seed_dev.py`는 DATABASE_URL에 연결된 DB를 가짜 데이터로 채우고, `--reset` 옵션은 기존 테이블을 모두 지웁니다.
 
+## 화면 디자인
+공통 스타일은 `static/css/app.css`(색 토큰·부품), 반복 조각은 `templates/_ui.html`(머리 영역·알약 매크로)에 있습니다.
+글꼴은 Pretendard 가변 글꼴(SIL OFL 1.1, `static/fonts/pretendard/OFL.txt`)을 저장소에서 직접 제공합니다.
+색 규칙: 크기는 남색 한 가지 색의 진하기, 증감은 파랑↔빨강(상승 = 빨강). 토큰 대비는 `tests/test_ui.py`가 검사합니다.
+
 ## 지리 데이터
 좌표는 주소정보누리집 위치정보요약DB(도로명주소 매칭), 경계는 국토지리정보원 연속수치지형도 행정경계(읍면동, CC BY)로 만듭니다.
 경계 자료보다 새로운 행정구역 개편은 `geo/code_map.csv`(옛 법정동 코드 → 새 코드)로 반영합니다. 화면 하단에 경계 출처를 표시합니다(CC BY 조건).

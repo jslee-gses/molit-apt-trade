@@ -1,29 +1,35 @@
 {% extends "base.html" %}
+{% import "_ui.html" as ui %}
 {% block title %}{{ c.apt_nm }} · 아파트 실거래가{% endblock %}
+{% block page_head %}{{ ui.page_head(c.apt_nm, c.region_name or '지역 미판정') }}{% endblock %}
 {% block body %}
-<h2 style="margin-top:8px">{{ c.apt_nm }}</h2>
-<p class="meta">{{ c.region_name or '지역 미판정' }} · 신고 법정동 {{ c.api_umd_nm or '-' }} · 지번 {{ c.jibun or '-' }} · {{ c.road_nm or '' }}
-  · 건축 {{ c.build_year or '-' }}년 · 좌표
-  {% if c.lon is not none %}{{ '%.5f'|format(c.lon) }}, {{ '%.5f'|format(c.lat) }} ({{ c.geocode_status }}{% if c.region_match %}, {{ c.region_match }}{% endif %}){% else %}없음 ({{ c.geocode_status }}){% endif %}
-  {% if c.sgg_mismatch %}<span class="warn">· 신고 시군구와 좌표 시군구가 다름</span>{% endif %}</p>
-<p id="msg" class="meta"></p>
-<h2>거래 가격 (해제 제외)</h2>
-<div id="scatter" class="chart"></div>
-<div class="cols" style="margin-top:12px">
-  <div><h2>면적 구간별 거래 수</h2><div id="areas" class="chart small"></div></div>
-  <div><h2>층별 거래 수</h2><div id="floors" class="chart small"></div></div>
+<div class="toolbar" style="margin-bottom:16px">
+  <span class="badge">신고 법정동 {{ c.api_umd_nm or '-' }}</span>
+  <span class="badge">지번 {{ c.jibun or '-' }}{% if c.road_nm %} · {{ c.road_nm }}{% endif %}</span>
+  <span class="badge">건축 {{ c.build_year or '-' }}년</span>
+  <span class="badge">좌표 {% if c.lon is not none %}{{ '%.5f'|format(c.lon) }}, {{ '%.5f'|format(c.lat) }} ({{ c.geocode_status }}{% if c.region_match %}, {{ c.region_match }}{% endif %}){% else %}없음 ({{ c.geocode_status }}){% endif %}</span>
+  {% if c.sgg_mismatch %}<span class="badge warn">신고 시군구와 좌표 시군구가 다름</span>{% endif %}
 </div>
-<h2>최근 거래 {{ trades|length }}건</h2>
-<div class="wrap"><table>
-  <thead><tr><th>계약일</th><th class="num">거래금액(만원)</th><th class="num">전용(㎡)</th><th class="num">㎡당(만원)</th><th class="num">층</th><th>동</th><th>거래유형</th></tr></thead>
-  <tbody>
-  {% for t in trades %}
-    <tr class="{{ 'cancel' if t.is_cancelled }}"><td>{{ t.deal_date or '' }}</td><td class="num">{{ t.deal_amount|comma }}</td>
-      <td class="num">{{ t.area if t.area is not none else '' }}</td><td class="num">{{ '%.0f'|format(t.ppm2) if t.ppm2 is not none else '' }}</td>
-      <td class="num">{{ t.floor if t.floor is not none else '' }}</td><td>{{ t.apt_dong or '' }}</td><td>{{ t.dealing_gbn or '' }}</td></tr>
-  {% endfor %}
-  </tbody>
-</table></div>
+<p id="msg" class="meta"></p>
+<section class="card"><h2 class="card-title">거래 가격 (해제 제외)</h2><div id="scatter" class="chart"></div></section>
+<div class="grid-2">
+  <section class="card"><h2 class="card-title">면적 구간별 거래 수</h2><div id="areas" class="chart small"></div></section>
+  <section class="card"><h2 class="card-title">층별 거래 수</h2><div id="floors" class="chart small"></div></section>
+</div>
+<section class="card">
+  <h2 class="card-title">최근 거래 {{ trades|length }}건</h2>
+  <div class="table-wrap"><table class="data-table">
+    <thead><tr><th scope="col">계약일</th><th scope="col" class="num">거래금액(만원)</th><th scope="col" class="num">전용(㎡)</th><th scope="col" class="num">㎡당(만원)</th><th scope="col" class="num">층</th><th scope="col">동</th><th scope="col">거래유형</th></tr></thead>
+    <tbody>
+    {% for t in trades %}
+      <tr class="{{ 'cancel' if t.is_cancelled }}"><td>{{ t.deal_date or '' }}</td><td class="num">{{ t.deal_amount|comma }}</td>
+        <td class="num">{{ t.area if t.area is not none else '' }}</td><td class="num">{{ '%.0f'|format(t.ppm2) if t.ppm2 is not none else '' }}</td>
+        <td class="num">{{ t.floor if t.floor is not none else '' }}</td><td>{{ t.apt_dong or '' }}</td><td>{{ t.dealing_gbn or '' }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <p class="table-foot">해제 거래는 취소선으로 표시합니다.</p>
+</section>
 {% endblock %}
 {% block scripts %}{% include "_charts.html" %}<script>window.APT_SEQ = {{ c.apt_seq|tojson }};</script>
 <script src="{{ url_for('static', filename='js/complex.js') }}"></script>{% endblock %}

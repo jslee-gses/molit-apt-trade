@@ -51,15 +51,14 @@ const App = (() => {
 
   function chart(el) {
     const c = echarts.init(el);
-    window.addEventListener('resize', () => c.resize());
-    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => location.reload());
+    window.addEventListener('resize', () => c.resize());   // 테마가 바뀌면 theme.js가 새로고침한다
     return c;
   }
 
   function baseOption() {
     return {
       backgroundColor: 'transparent',
-      textStyle: { color: css('--muted'), fontFamily: 'inherit' },
+      textStyle: { color: css('--muted'), fontFamily: getComputedStyle(document.body).fontFamily },
       grid: { left: 72, right: 24, top: 40, bottom: 36 },
       tooltip: {
         trigger: 'axis', backgroundColor: css('--card'), borderColor: css('--line'),
@@ -86,10 +85,46 @@ const App = (() => {
   }
 
   const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // 알약 묶음(button.pill[aria-pressed]): 하나만 선택. onChange(value)는 사용자가 바꿨을 때만 부른다.
+  function pills(el, onChange) {
+    const buttons = () => [...el.querySelectorAll('.pill')];
+    const api = {
+      get value() {
+        const on = buttons().find((b) => b.getAttribute('aria-pressed') === 'true') || buttons()[0];
+        return on ? on.dataset.value : '';
+      },
+      set value(v) { buttons().forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.value === v))); },
+      has: (v) => buttons().some((b) => b.dataset.value === v),
+    };
+    el.addEventListener('click', (ev) => {
+      const b = ev.target.closest('.pill');
+      if (!b || !el.contains(b) || b.getAttribute('aria-pressed') === 'true') return;
+      api.value = b.dataset.value;
+      if (onChange) onChange(b.dataset.value);
+    });
+    return api;
+  }
+
+  // 막대 셀: 숫자(text)를 항상 함께 보여 색만으로 전하지 않는다. 빈 값은 막대 없이 text('-')만.
+  function barCell(v, max, colorVar, text) {
+    const w = v == null || !max ? 0 : Math.max(2, Math.round((100 * Math.abs(v)) / max));
+    return `<span class="bar-cell"><span class="bar-track">${w ? `<i style="width:${w}%;background:var(${colorVar})"></i>` : ''}</span><span class="bar-num">${text}</span></span>`;
+  }
+  // 증감 막대: 가운데 기준, 상승 = 오른쪽 빨강, 하락 = 왼쪽 파랑
+  function divBarCell(v, maxAbs, text) {
+    let bar = '';
+    if (v != null && maxAbs && Math.abs(v) >= 0.05) {
+      const w = Math.max(2, Math.round((50 * Math.min(Math.abs(v), maxAbs)) / maxAbs));
+      bar = v >= 0 ? `<i style="left:50%;width:${w}%;background:var(--div-pos-2)"></i>`
+        : `<i style="left:${50 - w}%;width:${w}%;background:var(--div-neg-2)"></i>`;
+    }
+    return `<span class="bar-cell div"><span class="bar-track">${bar}</span><span class="bar-num">${text}</span></span>`;
+  }
+
   function message(el, text, cls = 'err') {
     el.className = `meta ${text ? cls : ''}`;
     el.textContent = text || '';
   }
 
-  return { css, api, fmt, shiftYm, monthRange, toMonthInput, fromMonthInput, readState, writeState, seriesColor, chart, baseOption, provisionalArea, escapeHtml, message };
+  return { css, api, fmt, shiftYm, monthRange, toMonthInput, fromMonthInput, readState, writeState, seriesColor, chart, baseOption, provisionalArea, escapeHtml, message, pills, barCell, divBarCell };
 })();

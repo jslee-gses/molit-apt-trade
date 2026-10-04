@@ -1,17 +1,22 @@
 {% extends "base.html" %}
+{% import "_ui.html" as ui %}
 {% block title %}대시보드 · 아파트 실거래가{% endblock %}
+{% block page_head %}{{ ui.page_head('전국 아파트 매매 한눈에', '확정된 최근 달의 거래량·중위 거래가와 24개월 흐름, 전년보다 많이 오르고 내린 시군구를 봅니다.') }}{% endblock %}
 {% block body %}
 <p id="msg" class="meta"></p>
 <div id="kpis" class="tiles"></div>
-<h2>전국 월별 거래량</h2>
-<div id="vol" class="chart"></div>
-<h2>전국 월별 중위 거래가</h2>
-<div id="price" class="chart"></div>
-<p class="meta">음영 구간은 신고기한(30일)이 지나지 않은 잠정 자료입니다. 해제 거래는 제외했습니다.</p>
-<h2>중위가 전년 대비 상승·하락 시군구 <span id="mover-note" class="muted"></span></h2>
-<div class="cols">
-  <div class="wrap"><table id="up"></table></div>
-  <div class="wrap"><table id="down"></table></div>
+<div class="grid-2">
+  <section class="card"><h2 class="card-title">전국 월별 거래량</h2><div id="vol" class="chart"></div></section>
+  <section class="card"><h2 class="card-title">전국 월별 중위 거래가</h2><div id="price" class="chart"></div></section>
 </div>
+<p class="meta">음영 구간은 신고기한(30일)이 지나지 않은 잠정 자료입니다. 해제 거래는 제외했습니다.</p>
+<section class="card">
+  <h2 class="card-title">중위가 전년 대비 상승·하락 시군구</h2>
+  <p class="card-sub" id="mover-note"></p>
+  <div class="grid-2">
+    <div><h3 class="list-title">상승 상위</h3><ol id="up" class="rank-list"></ol></div>
+    <div><h3 class="list-title">하락 상위</h3><ol id="down" class="rank-list"></ol></div>
+  </div>
+</section>
 {% endblock %}
 {% block scripts %}{% include "_charts.html" %}<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>{% endblock %}
