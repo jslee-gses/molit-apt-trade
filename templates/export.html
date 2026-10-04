@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}추출 · 아파트 실거래가{% endblock %}
+{% block body %}
+<form id="export-form" method="get" action="/export.csv">
+  <div class="bar">
+    <select name="target" aria-label="대상"><option value="raw">원본 거래</option><option value="agg">월별 집계</option></select>
+    <select id="format" aria-label="형식"><option value="csv">CSV (엑셀·Stata)</option><option value="parquet">Parquet (Python·R)</option></select>
+    <select name="band" aria-label="면적 구간">{% for v, l in bands %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select>
+    <label class="muted"><input type="checkbox" name="cancelled" value="1"> 해제 거래 포함(원본)</label>
+  </div>
+  <div class="bar">
+    <select id="sel-sido" aria-label="시도"></select><select id="sel-sgg" aria-label="시군구"></select><select id="sel-umd" aria-label="읍면동"></select>
+    <input type="hidden" name="region" id="region">
+    <input type="month" id="from" aria-label="시작월"> ~ <input type="month" id="to" aria-label="종료월">
+    <input type="hidden" name="from" id="from-v"><input type="hidden" name="to" id="to-v">
+    <button class="primary">내려받기</button>
+  </div>
+</form>
+<p id="msg" class="meta"></p>
+<ul class="notes">
+  <li>원본은 한 번에 최대 60개월까지 받을 수 있습니다. 전국 전체 기간은 연도별로 나눠 받으세요.</li>
+  <li>지역은 최신 경계 기준입니다(단지 좌표로 판정, 좌표가 없으면 시군구는 신고 코드). 지역을 고르지 않으면 전국입니다.</li>
+  <li>원본의 열 이름은 국토부 API 필드명입니다. <a href="/export/codebook.csv">코드북(열 설명) 내려받기</a></li>
+  <li>CSV는 UTF-8(BOM 포함)이라 엑셀에서 한글이 깨지지 않습니다. Parquet는 숫자·날짜 형식이 보존되고 크기가 작습니다.</li>
+</ul>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/common.js') }}"></script>
+<script src="{{ url_for('static', filename='js/export.js') }}"></script>{% endblock %}

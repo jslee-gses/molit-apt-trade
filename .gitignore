@@ -6,3 +6,14 @@ data/
 .env.*
 .claude/
 molit_api.py
+
+# 지리 원본(내려받은 파일)
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+geo_raw/
+# 개발용 가짜 경계(scripts/seed_dev.py)
+static/geo/0000-dev/
+geo_data/0000-dev/

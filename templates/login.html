@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}로그인 · 아파트 실거래가{% endblock %}
+{% block body %}
+<form method="post" class="bar" style="max-width:420px">
+  <input type="password" name="password" placeholder="비밀번호" autofocus required style="flex:1 1 200px">
+  <button class="primary">로그인</button>
+</form>
+{% if error %}<p class="err">{{ error }}</p>{% endif %}
+{% endblock %}

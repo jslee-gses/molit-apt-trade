@@ -6,8 +6,14 @@
   <title>{% block title %}아파트 실거래가{% endblock %}</title>
   <style>
     :root { --bg:#f7f7f8; --card:#fff; --text:#1a1a1a; --muted:#6b7280; --line:#e5e7eb; --accent:#2563eb; --red:#dc2626; --amber:#b45309; --green:#15803d; --track:#e5e7eb; }
+    :root { --series-1:#2a78d6; --series-2:#eb6834; --series-3:#1baf7a; --series-4:#eda100; --series-5:#e87ba4; --series-6:#008300; --series-7:#4a3aa7; --series-8:#e34948;
+            --seq-100:#cde2fb; --seq-200:#9ec5f4; --seq-300:#6da7ec; --seq-400:#3987e5; --seq-500:#256abf; --seq-600:#184f95; --seq-700:#0d366b;
+            --div-neg-2:#1c5cab; --div-neg-1:#86b6ef; --div-mid:#f0efec; --div-pos-1:#f2a3a2; --div-pos-2:#c23a39;
+            --grid:#e1e0d9; --axis:#c3c2b7; --provisional:rgba(137,135,129,0.14); }
     @media (prefers-color-scheme: dark) {
       :root { --bg:#111214; --card:#1b1c1f; --text:#ececec; --muted:#9ca3af; --line:#2c2e33; --accent:#60a5fa; --red:#f87171; --amber:#fbbf24; --green:#4ade80; --track:#2c2e33; }
+      :root { --series-1:#3987e5; --series-2:#d95926; --series-3:#199e70; --series-4:#c98500; --series-5:#d55181; --series-6:#008300; --series-7:#9085e9; --series-8:#e66767;
+              --div-mid:#383835; --grid:#2c2c2a; --axis:#383835; --provisional:rgba(137,135,129,0.20); }
     }
     * { box-sizing: border-box; }
     body { margin:0; font-family: -apple-system, "Pretendard", "Malgun Gothic", sans-serif; background:var(--bg); color:var(--text); }
@@ -42,15 +48,29 @@
     .pager { display:flex; gap:8px; align-items:center; margin-top: 12px; }
     a { color: var(--accent); }
     ul.notes { color: var(--muted); font-size: 14px; padding-left: 18px; line-height: 1.7; }
+    .chart { height: 340px; background: var(--card); border:1px solid var(--line); border-radius:12px; padding:8px; }
+    .chart.small { height: 220px; }
+    .cols { display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:12px; }
+    .chips { display:flex; flex-wrap:wrap; gap:6px; margin: 0 0 12px; }
+    .chip { display:inline-flex; gap:6px; align-items:center; padding:4px 8px 4px 6px; border:1px solid var(--line); border-left:4px solid var(--c); border-radius:8px; background:var(--card); font-size:14px; }
+    .chip button { padding:0 6px; border:none; background:none; color:var(--muted); }
+    .tile .d { font-size: 13px; margin-top: 2px; }
   </style>
 </head>
 <body>
 <main>
   <nav>
     <h1>아파트 매매 실거래가</h1>
-    <a href="/" class="{{ 'on' if request.path == '/' }}">거래 목록</a>
-    <a href="/status" class="{{ 'on' if request.path == '/status' }}">수집 현황·누락 점검</a>
+    <a href="/" class="{{ 'on' if request.path == '/' }}">대시보드</a>
+    <a href="/trends" class="{{ 'on' if request.path == '/trends' }}">추이</a>
+    <a href="/map" class="{{ 'on' if request.path == '/map' }}">지도</a>
+    <a href="/complexes" class="{{ 'on' if request.path.startswith('/complexes') }}">단지</a>
+    <a href="/export" class="{{ 'on' if request.path == '/export' }}">추출</a>
+    <a href="/trades" class="{{ 'on' if request.path == '/trades' }}">거래 목록</a>
+    <a href="/status" class="{{ 'on' if request.path == '/status' }}">수집 현황</a>
+    {% if session.get('auth') %}<form method="post" action="/logout" style="margin-left:auto"><button>로그아웃</button></form>{% endif %}
   </nav>
+  {% if p is defined %}
   <div class="meta">
     출처: 국토교통부 실거래가 정보(공공데이터포털 Open API) ·
     누적 {{ p.trades|comma }}건 · 마지막 수집 {{ p.last_fetched or "없음" }} ·
@@ -58,7 +78,10 @@
     {% if p.running %} · <b>수집 중</b> {{ p.current or "" }}{% endif %}
     {% if p.paused_until %} · <span class="warn">한도 도달, {{ p.paused_until }}부터 재개</span>{% endif %}
   </div>
+  {% endif %}
   {% block body %}{% endblock %}
+  <p class="meta" style="margin-top:24px">지역 경계: 국토지리정보원 연속수치지형도 행정경계(읍면동), CC BY · 단지 좌표: 주소정보누리집 위치정보요약DB</p>
 </main>
+{% block scripts %}{% endblock %}
 </body>
 </html>
