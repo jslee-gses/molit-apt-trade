@@ -1,9 +1,13 @@
 {% extends "base.html" %}
+{% import "_ui.html" as ui %}
 {% block title %}로그인 · 아파트 실거래가{% endblock %}
+{% block page_head %}{{ ui.page_head('로그인', '연구실 공유 비밀번호로 들어갑니다.') }}{% endblock %}
 {% block body %}
-<form method="post" class="bar" style="max-width:420px">
-  <input type="password" name="password" placeholder="비밀번호" autofocus required style="flex:1 1 200px">
-  <button class="primary">로그인</button>
+<form method="post" class="card filters" style="max-width:480px">
+  <div class="filter-row">
+    <input type="password" name="password" placeholder="비밀번호" aria-label="비밀번호" autofocus required>
+    <button class="primary">로그인</button>
+  </div>
+  {% if error %}<p class="err">{{ error }}</p>{% endif %}
 </form>
-{% if error %}<p class="err">{{ error }}</p>{% endif %}
 {% endblock %}

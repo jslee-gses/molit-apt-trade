@@ -1,6 +1,9 @@
 {% extends "base.html" %}
+{% import "_ui.html" as ui %}
+{% block title %}거래 목록 · 아파트 실거래가{% endblock %}
+{% block page_head %}{{ ui.page_head('거래 목록', '수집한 원본 거래를 지역·기간·검색어로 찾아봅니다.') }}{% endblock %}
 {% block body %}
-<form class="bar" method="get">
+<form class="card filters" method="get"><div class="filter-row">
   <select name="sido" onchange="this.form.lawd_cd.value='';this.form.submit()">
     <option value="">전체 시도</option>
     {% for s in sido_list %}<option {{ 'selected' if args.sido == s }}>{{ s }}</option>{% endfor %}
@@ -23,11 +26,11 @@
   {% if args.sido or args.lawd_cd or args.year or args.ymd %}
   <a class="btn" href="/download.csv?{{ request.query_string.decode() }}">CSV 다운로드</a>
   {% else %}<span class="muted">CSV는 지역·연도·계약월 중 하나를 고르면 받을 수 있습니다</span>{% endif %}
-</form>
+</div></form>
 
 <div class="meta">조건에 맞는 거래 {{ total|comma }}건 · 계약일 최신순</div>
-<div class="wrap">
-  <table>
+<div class="table-wrap">
+  <table class="data-table">
     <thead><tr>
       <th>계약일</th><th>시도</th><th>시군구</th><th>법정동</th><th>단지명</th>
       <th class="num">전용(㎡)</th><th class="num">층</th><th class="num">거래금액(만원)</th>

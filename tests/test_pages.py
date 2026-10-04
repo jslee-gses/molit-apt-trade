@@ -73,8 +73,19 @@ def test_complex_page(client, seeded):
 def test_export_page(client, seeded):
     html = client.get("/export").get_data(as_text=True)
     assert 'id="export-form"' in html and "/export/codebook.csv" in html
+    assert '<header class="page-head">' in html
+    assert 'type="hidden" name="target" id="target-v" value="raw"' in html
+    assert 'type="hidden" name="band" id="band-v" value="all"' in html
+    assert 'data-value="parquet"' in html and "<select name=" not in html
 
 
 def test_status_shows_aggregates(client, seeded):
     html = client.get("/status").get_data(as_text=True)
-    assert "집계 대기 계약월" in html
+    assert "집계 대기 계약월" in html and '<header class="page-head">' in html
+
+
+def test_trades_and_login_heads(client, app, seeded):
+    assert '<header class="page-head">' in client.get("/trades").get_data(as_text=True)
+    anon = app.test_client()
+    html = anon.get("/login").get_data(as_text=True)
+    assert '<header class="page-head">' in html and 'type="password"' in html

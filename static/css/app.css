@@ -141,6 +141,8 @@ a.rank-item { grid-template-columns:48px minmax(0,1fr) auto; }
   background:var(--soft); color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
 .badge.up { color:var(--up); }
 .badge.down { color:var(--down); }
+.badge.warn { color:var(--amber); }
+.toolbar .badge { white-space:normal; }
 
 /* 타일 */
 .tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:16px; margin-bottom:16px; }

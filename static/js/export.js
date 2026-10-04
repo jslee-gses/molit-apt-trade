@@ -2,6 +2,10 @@
 (async () => {
   const el = (id) => document.getElementById(id);
   const form = el('export-form');
+  // 알약 선택값은 같은 이름의 숨은 입력(target, band)으로 폼에 실린다. 형식은 폼 주소로 고른다.
+  const targetPills = App.pills(el('target'), (v) => { el('target-v').value = v; });
+  App.pills(el('band'), (v) => { el('band-v').value = v; });
+  const formatPills = App.pills(el('format'));
   async function fill(sel, level, parent, placeholder) {
     sel.innerHTML = '';
     sel.add(new Option(placeholder, ''));
@@ -32,14 +36,14 @@
     const fromV = el('from-v').value;
     const toV = el('to-v').value;
 
-    // Check if from > to
+    // 시작월이 종료월보다 늦으면 막는다
     if (fromV && toV && fromV > toV) {
       App.message(el('msg'), '시작월이 종료월보다 늦습니다.');
       return false;
     }
 
-    // Check if target is 'raw' and month span > 60
-    if (el('export-form').querySelector('[name=target]').value === 'raw' && fromV && toV) {
+    // 원본은 60개월까지
+    if (targetPills.value === 'raw' && fromV && toV) {
       const monthRange = App.monthRange(fromV, toV);
       if (monthRange.length > 60) {
         App.message(el('msg'), '원본은 한 번에 최대 60개월까지 받을 수 있습니다.');
@@ -47,7 +51,7 @@
       }
     }
 
-    form.action = el('format').value === 'parquet' ? '/export.parquet' : '/export.csv';
+    form.action = formatPills.value === 'parquet' ? '/export.parquet' : '/export.csv';
     App.message(el('msg'), '파일을 만드는 중입니다. 범위가 크면 시간이 걸립니다.', 'muted');
     return true;
   };
