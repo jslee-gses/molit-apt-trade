@@ -47,7 +47,27 @@ def test_next_jobs_priority_order(pg):
     assert "200601" not in [j["deal_ymd"] for j in no_backfill]
 
 
+def test_backfill_newest_month_first(pg):
+    """과거 자료 미수집(④)은 최신 달부터 거꾸로, 같은 달은 시군구 코드 순으로 받는다."""
+    with pg.connection() as conn:
+        for lawd_cd, ymd in [("11110", "200601"), ("11140", "202507"), ("11110", "202507"),
+                             ("11110", "202412"), ("11110", "202001")]:
+            add_job(conn, lawd_cd, ymd)
+        picked = jobs.next_jobs(conn, 10)
+    assert [(j["deal_ymd"], j["lawd_cd"]) for j in picked] == [
+        ("202507", "11110"), ("202507", "11140"), ("202412", "11110"), ("202001", "11110"), ("200601", "11110"),
+    ]
+
+
+def test_daily_start_defaults_to_midnight():
+    """하루 호출 한도가 자정(KST)에 다시 차므로 기본 수집 시작은 00:00."""
+    assert settings.REFRESH_AT == "00:00"
+    assert jobs.daily_start() == datetime(2026, 10, 3, 0, 0, tzinfo=settings.KST)
+    assert jobs.last_refresh_time() == datetime(2026, 10, 3, 0, 0, tzinfo=settings.KST)
+
+
 def test_daily_start_and_last_refresh(monkeypatch):
+    monkeypatch.setattr(settings, "REFRESH_AT", "06:00")
     assert jobs.daily_start() == datetime(2026, 10, 3, 6, 0, tzinfo=settings.KST)
     assert jobs.last_refresh_time() == datetime(2026, 10, 3, 6, 0, tzinfo=settings.KST)
     monkeypatch.setattr(settings, "now_kst", lambda: datetime(2026, 10, 3, 5, 0, tzinfo=settings.KST))
@@ -77,6 +97,7 @@ def test_check_job_marks_changed_month_pending(pg, monkeypatch):
 
 
 def test_run_batch_waits_before_daily_start(pg, monkeypatch):
+    monkeypatch.setattr(settings, "REFRESH_AT", "06:00")
     monkeypatch.setattr(settings, "now_kst", lambda: datetime(2026, 10, 3, 5, 0, tzinfo=settings.KST))
     jobs.run_batch(max_jobs=3)
     with pg.connection() as conn:
@@ -120,7 +141,20 @@ def test_run_batch_pauses_when_quota_runs_out(pg, monkeypatch):
         trades = conn.execute("SELECT COUNT(*) AS n FROM trades").fetchone()["n"]
     assert [d["lawd_cd"] for d in done] == ["11110"]
     assert trades == 3                                   # 두 번째 작업은 부분 저장되지 않음
-    assert jobs.state["paused_until"] == "2026-10-04 06:00:00"
+    assert jobs.state["paused_until"] == "2026-10-04 00:00:00"
+
+
+def test_quota_exceeded_right_after_start_retries_soon(pg, monkeypatch):
+    """시작 직후(1시간 안) 한도 초과는 API 쪽 초기화가 늦은 것일 수 있어 10분 뒤 다시 시도한다."""
+    monkeypatch.setattr(settings, "now_kst", lambda: datetime(2026, 10, 3, 0, 3, tzinfo=settings.KST))
+    monkeypatch.setattr(settings, "START_YMD", "202610")
+
+    def fetch_page(*a, **k):
+        raise api.QuotaExceeded("한도 초과(22)")
+
+    monkeypatch.setattr(api, "fetch_page", fetch_page)
+    jobs.run_batch(max_jobs=2)
+    assert jobs.state["paused_until"] == "2026-10-03 00:13:00"
 
 
 def test_run_batch_records_api_error(pg, monkeypatch):
