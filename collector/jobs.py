@@ -13,6 +13,8 @@ log = logging.getLogger(__name__)
 
 _lock = threading.Lock()
 state = {}
+QUOTA_EARLY_WINDOW = timedelta(hours=1)   # 수집 시작 후 이 안에 한도 초과가 오면
+QUOTA_EARLY_RETRY = timedelta(minutes=10)  # 하루를 쉬지 않고 이만큼 뒤 다시 시도한다
 _ensured = {}
 
 
@@ -113,7 +115,7 @@ def check_job(session, key, conn, lawd_cd, deal_ymd, on_call=None):
 
 
 def run_batch(max_jobs=20):
-    """스케줄러가 1분마다 호출. 매일 REFRESH_AT부터 하루 한도까지 수집하고, 0시~REFRESH_AT에는 쉰다."""
+    """스케줄러가 1분마다 호출. 매일 REFRESH_AT(기본 자정)부터 하루 한도까지 수집하고, 그 전에는 쉰다."""
     if not _lock.acquire(blocking=False):
         return
     state["running"] = True
@@ -163,8 +165,13 @@ def run_batch(max_jobs=20):
                     store.mark_error(conn, lawd_cd, deal_ymd, msg)
                     state["last_error"] = f"{settings.now_str()} {deal_ymd} {lawd_cd}: {msg}"
     except api.QuotaExceeded as e:
-        # 다음 날 수집 시작 시각까지 쉰다
-        resume = daily_start(1).strftime("%Y-%m-%d %H:%M:%S")
+        # 다음 날 수집 시작 시각까지 쉰다. 시작 직후라면 API 쪽 한도 초기화가 늦은 것일 수 있어 곧 다시 시도한다.
+        now = settings.now_kst()
+        if now < daily_start() + QUOTA_EARLY_WINDOW:
+            resume_at = (now + QUOTA_EARLY_RETRY).replace(second=0, microsecond=0)
+        else:
+            resume_at = daily_start(1)
+        resume = resume_at.strftime("%Y-%m-%d %H:%M:%S")
         state["paused_until"] = resume
         log.info("%s → %s까지 대기", e, resume)
     except Exception as e:  # noqa: BLE001

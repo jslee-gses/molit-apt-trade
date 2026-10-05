@@ -42,7 +42,7 @@ SSH 연결이 끊겨도 이전이 중단되지 않도록 백그라운드로 실�
 ## 4. 수집 재개
 - `/status`에서 거래 건수·작업 수가 이전과 같은지 확인한다.
 - 예전 변수 `COLLECTOR_DISABLED`, `VOLUME_LIMIT_MB`를 지운다(롤백이 필요 없다고 판단한 경우에만. 롤백하려면 3단계에서 적어 둔 값이 필요하다).
-- Variables에서 `COLLECT_ENABLED`를 지운다(기본 `true`). 재배포하면 수집이 바로 시작된다(KST 06:00 이후면 즉시 국토부 API를 호출해 하루 한도를 쓰고, 06:00 전이면 06:00에 시작). 재배포 시점을 정해서 한다. `/status`로 수집이 도는지 확인한다.
+- Variables에서 `COLLECT_ENABLED`를 지운다(기본 `true`). 재배포하면 수집이 바로 시작된다(`REFRESH_AT` 기본 00:00 KST 이후이므로 즉시 국토부 API를 호출해 그날 남은 한도를 쓴다). 재배포 시점을 정해서 한다. `/status`로 수집이 도는지 확인한다.
 
 ## 5. 정리 (1주일 동안 안정적으로 돈 뒤)
 - SQLite 원본을 내려받아 보관한다(예: `railway ssh --service web` 안에서 `gzip -c /data/trades.db > /data/trades.db.gz` 후 Railway 볼륨 백업 또는 파일 다운로드 기능 사용).
