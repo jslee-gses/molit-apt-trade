@@ -57,7 +57,7 @@ def _naive(dt):
 def next_jobs(conn, limit, allow_backfill=True):
     """우선순위
     ① 최근 N개월 미수집(새 달 포함)  ② 최근 N개월 매일 재수집  ③ 오류·불일치 재시도
-    ④ 과거 자료 미수집(오래된 달부터, 용량 여유가 있을 때만)
+    ④ 과거 자료 미수집(최신 달부터 거꾸로, 용량 여유가 있을 때만)
     ⑤ 지난 1년 건수 재확인(RECHECK_DAYS 주기)  ⑥ 그보다 오래된 달 건수 재확인(OLD_RECHECK_DAYS 주기)
     """
     now = settings.now_kst()
@@ -72,6 +72,7 @@ def next_jobs(conn, limit, allow_backfill=True):
         limit=limit,
     )
     sql = """
+    SELECT * FROM (
     SELECT lawd_cd, deal_ymd, 'fetch' AS mode, 1 AS pri FROM jobs
      WHERE status = 'pending' AND deal_ymd >= %(recent)s
     UNION ALL
@@ -90,7 +91,10 @@ def next_jobs(conn, limit, allow_backfill=True):
     UNION ALL
     SELECT lawd_cd, deal_ymd, 'check', 6 FROM jobs
      WHERE status = 'done' AND deal_ymd < %(check_from)s AND checked_at <= %(old_recheck)s
-    ORDER BY pri, deal_ymd, lawd_cd LIMIT %(limit)s
+    ) j
+    -- ④ 과거 미수집만 최신 달부터 거꾸로(나머지는 오래된 달부터)
+    ORDER BY pri, CASE WHEN pri = 4 THEN NULL ELSE deal_ymd END, deal_ymd DESC, lawd_cd
+    LIMIT %(limit)s
     """
     return conn.execute(sql, params).fetchall()
 

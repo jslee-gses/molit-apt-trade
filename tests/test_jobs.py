@@ -47,6 +47,18 @@ def test_next_jobs_priority_order(pg):
     assert "200601" not in [j["deal_ymd"] for j in no_backfill]
 
 
+def test_backfill_newest_month_first(pg):
+    """과거 자료 미수집(④)은 최신 달부터 거꾸로, 같은 달은 시군구 코드 순으로 받는다."""
+    with pg.connection() as conn:
+        for lawd_cd, ymd in [("11110", "200601"), ("11140", "202507"), ("11110", "202507"),
+                             ("11110", "202412"), ("11110", "202001")]:
+            add_job(conn, lawd_cd, ymd)
+        picked = jobs.next_jobs(conn, 10)
+    assert [(j["deal_ymd"], j["lawd_cd"]) for j in picked] == [
+        ("202507", "11110"), ("202507", "11140"), ("202412", "11110"), ("202001", "11110"), ("200601", "11110"),
+    ]
+
+
 def test_daily_start_and_last_refresh(monkeypatch):
     assert jobs.daily_start() == datetime(2026, 10, 3, 6, 0, tzinfo=settings.KST)
     assert jobs.last_refresh_time() == datetime(2026, 10, 3, 6, 0, tzinfo=settings.KST)
