@@ -50,6 +50,8 @@ def test_map_page(client, seeded):
     assert 'id="compare"' in html and 'class="data-table"' in html and 'id="rank-q"' in html
     assert 'data-value="yoy_n" aria-pressed="false"' in html and 'data-value="median_price" aria-pressed="true"' in html
     assert 'data-value="le60"' in html and "<select" not in html
+    assert 'id="pts" role="group"' in html and 'data-value="1" aria-pressed="true"' in html
+    assert "단지 표시" in html
 
 
 def test_complexes_search_page(client, seeded):
