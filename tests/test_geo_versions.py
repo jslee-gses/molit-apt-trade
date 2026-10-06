@@ -3,7 +3,7 @@ from datetime import datetime
 import pytest
 
 import settings
-from geo import assign, hooks, pipeline, versions
+from geo import assign, code_map, hooks, pipeline, versions
 from tests.geo_fixtures import make_version
 
 
@@ -11,6 +11,7 @@ from tests.geo_fixtures import make_version
 def setup(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "now_kst", lambda: datetime(2026, 10, 3, 7, 0, tzinfo=settings.KST))
     monkeypatch.setattr(assign, "GEO_DATA", tmp_path)
+    monkeypatch.setattr(code_map, "PATH", tmp_path / "code_map.csv")
     monkeypatch.setattr(hooks, "ON_REGION_CHANGE", [])
     monkeypatch.setattr(hooks, "BEFORE_ACTIVATE", [])
     monkeypatch.setattr(hooks, "AFTER_ACTIVATE", [])
@@ -150,3 +151,38 @@ def test_pipeline_sync_failure_does_not_block_and_backs_off(pg, tmp_path):
     assert pipeline.state["last_attempt"] is not None
     pipeline.run()                                   # 1시간 안: 다시 시도하지 않는다
     assert calls == ["2027-01"]
+
+
+def test_switch_reassigns_code_complexes(pg, tmp_path):
+    make_version(tmp_path, "2026-10")
+    with pg.connection() as conn:
+        conn.execute("""INSERT INTO complexes (apt_seq, api_sgg_cd, api_umd_cd, geocode_status) VALUES
+            ('K', '11110', '10100', 'pending')""")
+        versions.sync(conn)
+        k = conn.execute("SELECT * FROM complexes").fetchone()
+        assert (k["region_umd_cd"], k["region_match"], k["boundary_version"]) == ("11110101", "code", "2026-10")
+        make_version(tmp_path, "2027-01", {"11110103": (126.95, 37.57, 126.96, 37.58)})
+        versions.sync(conn)
+        k = conn.execute("SELECT * FROM complexes").fetchone()
+    assert (k["region_umd_cd"], k["region_match"], k["boundary_version"]) == (None, "none", "2027-01")
+
+
+def test_pipeline_reassigns_when_code_map_changes(pg, tmp_path):
+    make_version(tmp_path, "2026-10")
+    (tmp_path / "code_map.csv").write_text("old_emd_cd,new_emd_cd\n", encoding="utf-8")
+    with pg.connection() as conn:
+        conn.execute("""INSERT INTO complexes (apt_seq, api_sgg_cd, api_umd_cd, geocode_status) VALUES
+            ('K', '11999', '10100', 'pending')""")
+    pipeline.run()
+    with pg.connection() as conn:
+        assert conn.execute("SELECT region_match FROM complexes").fetchone()["region_match"] == "none"
+    pipeline.run()                                             # 대응표 그대로 → 재판정 없음
+    assert pipeline.state["code_map_reset"] is False
+    (tmp_path / "code_map.csv").write_text("old_emd_cd,new_emd_cd\n11999101,11140101\n", encoding="utf-8")
+    pipeline.run()
+    assert pipeline.state["code_map_reset"] is True
+    with pg.connection() as conn:
+        k = conn.execute("SELECT * FROM complexes").fetchone()
+        flags = [r["name"] for r in conn.execute("SELECT name FROM app_flags WHERE name LIKE 'code_map:%'")]
+    assert (k["region_umd_cd"], k["region_match"]) == ("11140101", "code")
+    assert len(flags) == 1

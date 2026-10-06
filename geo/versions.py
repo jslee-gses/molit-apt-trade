@@ -46,10 +46,7 @@ def register(conn, version, data_dir=None):
 
 def switch(conn, version, data_dir=None):
     """모든 단지를 version 경계로 재판정하고, 전환 전 훅을 거쳐 한 트랜잭션으로 활성화한다."""
-    boundary = assign.Boundary.load(version, data_dir or assign.GEO_DATA)
-    rows = conn.execute("SELECT apt_seq, lon, lat, api_sgg_cd FROM complexes "
-                        "WHERE geocode_status IN ('ok', 'manual') AND lon IS NOT NULL AND lat IS NOT NULL").fetchall()
-    results = [assign.assign_row(boundary, r, version) for r in rows]
+    results = assign.compute(conn, version, data_dir=data_dir or assign.GEO_DATA, pending_only=False)
     with conn.transaction():
         complexes.lock_complexes(conn)
         conn.execute("CREATE TEMP TABLE staged_regions (apt_seq TEXT PRIMARY KEY, umd TEXT, sgg TEXT, "
@@ -66,8 +63,8 @@ def switch(conn, version, data_dir=None):
             UPDATE complexes c SET region_umd_cd = s.umd, region_sgg_cd = s.sgg, region_match = s.match,
                    boundary_version = s.version, sgg_mismatch = s.mismatch
               FROM staged_regions s
-             WHERE c.apt_seq = s.apt_seq AND c.lon = s.lon AND c.lat = s.lat
-               AND c.geocode_status IN ('ok', 'manual')""")   # 계산 뒤 바뀐 단지는 건너뛰고 다음 판정에 맡긴다
+             WHERE c.apt_seq = s.apt_seq
+               AND c.lon IS NOT DISTINCT FROM s.lon AND c.lat IS NOT DISTINCT FROM s.lat""")   # 계산 뒤 좌표가 바뀐 단지는 건너뛰고 다음 판정에 맡긴다
         # 부분 유니크 인덱스(활성 1개) 때문에 먼저 모두 끄고 새 버전을 켠다
         conn.execute("UPDATE boundary_versions SET is_active = false WHERE is_active")
         if conn.execute("UPDATE boundary_versions SET is_active = true WHERE version = %s",
