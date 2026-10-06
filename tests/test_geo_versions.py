@@ -71,7 +71,7 @@ def test_switch_failure_keeps_old_version(pg, tmp_path):
 
 def test_pipeline_run_end_to_end(pg, tmp_path, monkeypatch):
     from collector import store
-    from geo import address_points
+    from geo import complexes
     from tests.helpers import add_job, item
 
     make_version(tmp_path, "2026-10")
@@ -81,14 +81,17 @@ def test_pipeline_run_end_to_end(pg, tmp_path, monkeypatch):
         add_job(conn, "11110", "202601")
         monkeypatch.setattr(store, "AFTER_SAVE", [])        # 단지는 pipeline의 bootstrap이 만든다
         store.save_job(conn, "11110", "202601", [item(aptSeq="A")], 1)
-        address_points.load(conn, [("111104100135|0|1|0", 126.955, 37.575, "가")], "202609")
-    pipeline.run()
+    pipeline.run()                                          # 단지 생성
+    with pg.connection() as conn:
+        complexes.set_manual(conn, "A", 126.955, 37.575)
+    pipeline.run()                                          # 좌표로 판정
     with pg.connection() as conn:
         a = conn.execute("SELECT * FROM complexes").fetchone()
-    assert (a["geocode_status"], a["region_umd_cd"]) == ("ok", "11110101")
+    assert (a["geocode_status"], a["region_umd_cd"], a["region_match"]) == ("manual", "11110101", "within")
     assert pipeline.state["last_error"] is None
     assert pipeline.state["last_result"]["assigned"] == 1
-    assert ran == [True]
+    assert "located" not in pipeline.state["last_result"]
+    assert ran == [True, True]
 
 
 def test_switch_skips_complex_changed_after_staging(pg, tmp_path):

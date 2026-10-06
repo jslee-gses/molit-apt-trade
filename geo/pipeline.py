@@ -1,6 +1,6 @@
 """스케줄러가 10분마다 부르는 지리 처리.
 
-경계 버전 동기화 → (처음 한 번) 기존 거래로 단지 만들기 → 좌표 연결 → 지역 판정 → AFTER_RUN(집계 등)
+경계 버전 동기화 → (처음 한 번) 기존 거래로 단지 만들기 → 지역 판정 → AFTER_RUN(집계 등)
 """
 import logging
 import threading
@@ -8,7 +8,7 @@ from datetime import timedelta
 
 import db
 import settings
-from geo import assign, complexes, locate, versions
+from geo import assign, complexes, versions
 
 log = logging.getLogger(__name__)
 _lock = threading.Lock()
@@ -55,14 +55,12 @@ def run():
         with db.connection() as conn:
             switched = _sync(conn)
             added = _bootstrap(conn)
-            located = locate.locate_pending(conn)
             version = versions.active(conn)
             assigned = assign.assign_pending(conn, version) if version else 0
             for step in AFTER_RUN:
                 step(conn)
         state.update(last_run=settings.now_str(), last_error=None, last_result=dict(
-            switched=switched, added=added, located=located["ok"], failed=located["failed"],
-            assigned=assigned))
+            switched=switched, added=added, assigned=assigned))
     except Exception as e:  # noqa: BLE001
         state["last_error"] = f"{settings.now_str()} {type(e).__name__}: {e}"
         log.exception("지리 처리 실패")

@@ -53,6 +53,13 @@ def test_summary_and_failed(pg, seeded):
     assert [r["apt_seq"] for r in f] == ["B"] and f[0]["n_trades"] == 0
 
 
+def test_summary_has_no_address_points(pg, seeded):
+    with pg.connection() as conn:
+        s = complexes.summary(conn)
+        assert "address_points" not in s
+        assert conn.execute("SELECT to_regclass('address_points') AS t").fetchone()["t"] is None
+
+
 def test_manual_coords_api(client, seeded):
     resp = client.post("/api/complexes/B/coords", json={"lon": 126.97, "lat": 37.58})
     assert resp.status_code == 200 and resp.get_json() == {"ok": True}

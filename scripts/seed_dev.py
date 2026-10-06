@@ -94,7 +94,7 @@ def main(argv=None):
             if not args.reset:
                 print("이미 거래가 있습니다. 지우고 다시 만들려면 --reset")
                 return 1
-            conn.execute("TRUNCATE trades, jobs, changes, api_usage, complexes, address_points, agg_month, "
+            conn.execute("TRUNCATE trades, jobs, changes, api_usage, complexes, agg_month, "
                          "agg_dirty, regions, boundary_versions RESTART IDENTITY")
         complexes_rows = []
         for code, (x0, y0, x1, y1) in sq.items():

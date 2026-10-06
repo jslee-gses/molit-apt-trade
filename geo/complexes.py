@@ -107,12 +107,10 @@ def summary(conn):
           FROM complexes""").fetchone()
     by_status = {r["geocode_status"]: r["n"] for r in conn.execute(
         "SELECT geocode_status, COUNT(*) AS n FROM complexes GROUP BY 1")}
-    points = conn.execute("SELECT COUNT(*) AS n, MAX(source_month) AS month FROM address_points").fetchone()
     version = conn.execute("SELECT version FROM boundary_versions WHERE is_active").fetchone()
     total = row["total"]
     return dict(row, by_status=by_status,
                 located_pct=round(100 * row["located"] / total, 1) if total else 0.0,
-                address_points=points["n"], address_month=points["month"],
                 boundary_version=version["version"] if version else None)
 
 
