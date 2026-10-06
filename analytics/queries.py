@@ -180,7 +180,7 @@ def _region_filter(region):
 
 _COMPLEX_SELECT = """
     SELECT c.apt_seq, c.apt_nm, c.build_year, c.last_deal_date, c.api_umd_nm, c.jibun, c.road_nm,
-           c.lon, c.lat, c.geocode_status, c.region_match, c.sgg_mismatch,
+           c.lon, c.lat, c.geocode_status, c.geocode_source, c.region_match, c.region_umd_cd, c.sgg_mismatch,
            COALESCE(ru.full_name, rs.full_name) AS region_name
       FROM complexes c
       LEFT JOIN regions ru ON ru.boundary_version = %s AND ru.region_cd = c.region_umd_cd
