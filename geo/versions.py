@@ -46,7 +46,9 @@ def register(conn, version, data_dir=None):
 
 def switch(conn, version, data_dir=None):
     """모든 단지를 version 경계로 재판정하고, 전환 전 훅을 거쳐 한 트랜잭션으로 활성화한다."""
-    results = assign.compute(conn, version, data_dir=data_dir or assign.GEO_DATA, pending_only=False)
+    data_dir = data_dir or assign.GEO_DATA
+    boundary = assign.Boundary.load(version, data_dir)   # 좌표 단지가 없어도 경계 파일을 전환 전에 검증한다
+    results = assign.compute(conn, version, boundary=boundary, data_dir=data_dir, pending_only=False)
     with conn.transaction():
         complexes.lock_complexes(conn)
         conn.execute("CREATE TEMP TABLE staged_regions (apt_seq TEXT PRIMARY KEY, umd TEXT, sgg TEXT, "

@@ -101,10 +101,15 @@
       if (my !== seq) return;
       const fc = await geo(apiData.version, apiData.level, apiData.parent);
       if (my !== seq) return;
-      const pts = apiData.level === 'umd' && state.pts === '1'
-        ? (await App.api('/api/map/complexes', { parent: apiData.parent, band: state.band, from: apiData.from, to: apiData.to })).complexes
-        : [];
+      let pts = [];
+      let ptsFailed = false;
+      if (apiData.level === 'umd' && state.pts === '1') {
+        try {
+          pts = (await App.api('/api/map/complexes', { parent: apiData.parent, band: state.band, from: apiData.from, to: apiData.to })).complexes;
+        } catch (e) { pts = []; ptsFailed = true; }   // 점 요청 실패가 지역 지도·순위·비교표를 막지 않게 한다
+      }
       if (my !== seq) return;
+      if (ptsFailed) App.message(el('msg'), '단지 점을 불러오지 못했습니다. 지역 지도만 표시합니다.');
       points = pts;
       data = apiData;
       if (el('side').hidden === false && !data.values.some((v) => v.region_cd === sideCode)) el('side-drill').hidden = true;

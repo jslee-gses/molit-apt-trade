@@ -112,3 +112,19 @@ def test_pipeline_bootstrap_failure_isolated(pg, tmp_path, monkeypatch):
     assert pipeline.state["last_error"] is None
     assert ran == [True]
     assert pipeline.state["last_result"]["added"] == 0
+
+
+def test_pipeline_assign_failure_isolated(pg, tmp_path, monkeypatch):
+    make_version(tmp_path, "2026-10")          # 활성 버전이 있어야 판정 단계가 실행된다
+    ran = []
+    pipeline.AFTER_RUN.append(lambda conn: ran.append(True))
+
+    def boom(conn, version, boundary=None):
+        raise RuntimeError("판정 실패")
+    monkeypatch.setattr(assign, "assign_pending", boom)
+    pipeline.state["assign_error"] = None
+    pipeline.run()
+    assert "판정 실패" in pipeline.state["assign_error"]
+    assert pipeline.state["last_error"] is None
+    assert ran == [True]
+    assert pipeline.state["last_result"]["assigned"] == 0

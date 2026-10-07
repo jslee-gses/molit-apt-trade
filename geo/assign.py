@@ -18,6 +18,7 @@ from geo import code_map, complexes, hooks
 
 GEO_DATA = settings.BASE_DIR / "geo_data"
 NEAREST_M = 200
+BATCH = 5000   # 한 트랜잭션에 반영할 단지 수(단지 잠금을 오래 쥐지 않게)
 _M_PER_DEG_LAT = 110_540
 _M_PER_DEG_LON_EQ = 111_320
 LOCATED = ("ok", "manual")
@@ -58,8 +59,6 @@ class Boundary:
             if d <= NEAREST_M and (best is None or (d, self.codes[i]) < best):
                 best = (d, self.codes[i])
         return (best[1], "nearest") if best else (None, "none")
-
-
 
 
 def code_region(sgg, umd, valid, mapping):
@@ -121,16 +120,19 @@ def compute_pending(conn, version, boundary=None):
 
 
 def apply_results(conn, results):
-    """판정 결과를 반영한다. 계산 뒤 좌표가 바뀐 단지는 건드리지 않아 다음 실행에서 다시 판정된다."""
-    seqs = [r["apt_seq"] for r in results]
-    with conn.transaction():
-        complexes.lock_complexes(conn)
-        for hook in hooks.ON_REGION_CHANGE:   # 바뀌기 전 지역
-            hook(conn, seqs)
-        with conn.cursor() as cur:
-            cur.executemany(UPDATE, results)
-        for hook in hooks.ON_REGION_CHANGE:   # 바뀐 뒤 지역
-            hook(conn, seqs)
+    """판정 결과를 BATCH건씩 나눠 반영한다(묶음마다 트랜잭션·잠금·훅). 계산 뒤 좌표가 바뀐 단지는 건드리지 않아
+    다음 실행에서 다시 판정된다. → 전체 건수"""
+    for i in range(0, len(results), BATCH):
+        chunk = results[i:i + BATCH]
+        seqs = [r["apt_seq"] for r in chunk]
+        with conn.transaction():
+            complexes.lock_complexes(conn)
+            for hook in hooks.ON_REGION_CHANGE:   # 바뀌기 전 지역
+                hook(conn, seqs)
+            with conn.cursor() as cur:
+                cur.executemany(UPDATE, chunk)
+            for hook in hooks.ON_REGION_CHANGE:   # 바뀐 뒤 지역
+                hook(conn, seqs)
     return len(results)
 
 

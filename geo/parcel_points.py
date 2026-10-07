@@ -85,6 +85,12 @@ def read_points(paths, wanted):
         gdf = pyogrio.read_dataframe(src, columns=[col], fids=fids)
         if gdf.crs is None:
             gdf = gdf.set_crs(SRC_CRS)
+        gdf["geometry"] = gdf.geometry.make_valid()          # 자기 교차 등 잘못된 도형 보정(GEOS 오류 방지)
+        empty = gdf.geometry.is_empty | gdf.geometry.isna()
+        stats["dropped"] += int(empty.sum())
+        gdf = gdf[~empty]
+        if gdf.empty:
+            continue
         merged = gdf.dissolve(by=col)
         pts = gpd.GeoSeries(merged.geometry.representative_point(), crs=gdf.crs).to_crs("EPSG:4326")
         for p, geom in pts.items():

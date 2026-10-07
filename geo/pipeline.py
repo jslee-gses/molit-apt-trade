@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 _lock = threading.Lock()
 RETRY_AFTER = timedelta(hours=1)
 _failed = None   # (버전, 실패 시각): 같은 버전 전환을 한동안 다시 시도하지 않는다
-state = {"last_attempt": None, "last_run": None, "sync_error": None, "bootstrap_error": None, "code_map_reset": None, "last_result": None, "last_error": None}
+state = {"last_attempt": None, "last_run": None, "sync_error": None, "bootstrap_error": None, "assign_error": None, "code_map_reset": None, "last_result": None, "last_error": None}
 AFTER_RUN = []   # fn(conn). 계획 3: 집계 대기열 처리
 
 
@@ -47,6 +47,20 @@ def _bootstrap(conn):
     return added
 
 
+def _assign(conn):
+    """판정 단계 실패가 AFTER_RUN(집계)을 막지 않게 한다. 다음 실행에서 다시 시도한다. → 판정한 단지 수"""
+    try:
+        state["code_map_reset"] = check_code_map(conn)
+        version = versions.active(conn)
+        assigned = assign.assign_pending(conn, version) if version else 0
+    except Exception as e:  # noqa: BLE001
+        state["assign_error"] = f"{settings.now_str()} {type(e).__name__}: {e}"
+        log.exception("지역 판정 실패")
+        return 0
+    state["assign_error"] = None
+    return assigned
+
+
 def check_code_map(conn):
     """대응표(code_map.csv)가 지난 판정 때와 다르면 코드로 판정한 단지를 다시 판정하게 한다. → 재판정을 걸었으면 True"""
     flag = f"code_map:{code_map.digest()}"
@@ -68,9 +82,7 @@ def run():
         with db.connection() as conn:
             switched = _sync(conn)
             added = _bootstrap(conn)
-            state["code_map_reset"] = check_code_map(conn)
-            version = versions.active(conn)
-            assigned = assign.assign_pending(conn, version) if version else 0
+            assigned = _assign(conn)
             for step in AFTER_RUN:
                 step(conn)
         state.update(last_run=settings.now_str(), last_error=None, last_result=dict(

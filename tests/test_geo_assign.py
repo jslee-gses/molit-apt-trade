@@ -134,3 +134,21 @@ def test_stale_result_not_applied(pg, tmp_path):
         assert rows["A"]["boundary_version"] is None and rows["A"]["region_umd_cd"] is None
         assert rows["B"]["boundary_version"] == "2026-10"
         assert assign.assign_pending(conn, "2026-10", b) == 1   # 다음 실행에서 다시 판정
+
+
+def test_apply_results_in_batches(pg, tmp_path, monkeypatch):
+    make_version(tmp_path, "2026-10")
+    monkeypatch.setattr(assign, "GEO_DATA", tmp_path)
+    monkeypatch.setattr(assign, "BATCH", 2)
+    calls = []
+    monkeypatch.setattr(hooks, "ON_REGION_CHANGE", [lambda conn, seqs: calls.append(sorted(seqs))])
+    with pg.connection() as conn:
+        versions_register(conn)
+        conn.execute("""INSERT INTO complexes (apt_seq, api_sgg_cd, api_umd_cd, geocode_status) VALUES
+            ('A', '11110', '10100', 'pending'), ('B', '11110', '10100', 'pending'),
+            ('C', '11110', '10100', 'pending'), ('D', '11110', '10100', 'pending'),
+            ('E', '11110', '10100', 'pending')""")
+        assert assign.assign_pending(conn, "2026-10") == 5
+        n = conn.execute("SELECT COUNT(*) AS n FROM complexes WHERE boundary_version = '2026-10'").fetchone()["n"]
+    assert n == 5
+    assert len(calls) == 6                    # 3묶음 × (전·후)

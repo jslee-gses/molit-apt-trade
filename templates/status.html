@@ -144,7 +144,8 @@
 <p class="meta">활성 경계 {{ g.boundary_version or '없음' }} · 마지막 처리 {{ g.pipeline.last_run or '-' }}
   {% if g.pipeline.last_error %}<span class="err">· {{ g.pipeline.last_error }}</span>{% endif %}
   {% if g.pipeline.sync_error %}<span class="err">· {{ g.pipeline.sync_error }}</span>{% endif %}
-  {% if g.pipeline.bootstrap_error %}<span class="err">· {{ g.pipeline.bootstrap_error }}</span>{% endif %}</p>
+  {% if g.pipeline.bootstrap_error %}<span class="err">· {{ g.pipeline.bootstrap_error }}</span>{% endif %}
+  {% if g.pipeline.assign_error %}<span class="err">· {{ g.pipeline.assign_error }}</span>{% endif %}</p>
 {% if g.failed_rows %}
 
 <h2>좌표를 찾지 못한 단지 (거래 많은 순 {{ g.failed_rows|length }}개)</h2>

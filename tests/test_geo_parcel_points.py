@@ -139,3 +139,11 @@ def test_main_stops_without_zip(pg, tmp_path, capsys, monkeypatch):
     monkeypatch.setattr(wiring, "wire", lambda: None)
     assert parcel_points.main(["--dir", str(tmp_path)]) == 1
     assert "zip" in capsys.readouterr().out
+
+
+def test_read_points_handles_self_intersecting_polygon(tmp_path):
+    bowtie = Polygon([(X0, Y0), (X0 + 100, Y0 + 100), (X0 + 100, Y0), (X0, Y0 + 100)])   # 나비넥타이
+    z = make_zip(tmp_path, "AL_D002_bow", [(P1, bowtie)])
+    pts, stats = parcel_points.read_points([z], {P1})
+    assert stats["matched"] + stats["dropped"] == 1
+    assert stats["matched"] == 1 and P1 in pts

@@ -186,3 +186,14 @@ def test_pipeline_reassigns_when_code_map_changes(pg, tmp_path):
         flags = [r["name"] for r in conn.execute("SELECT name FROM app_flags WHERE name LIKE 'code_map:%'")]
     assert (k["region_umd_cd"], k["region_match"]) == ("11140101", "code")
     assert len(flags) == 1
+
+
+def test_switch_rejects_broken_boundary_even_without_located_complexes(pg, tmp_path):
+    make_version(tmp_path, "2026-10")
+    with pg.connection() as conn:
+        versions.sync(conn)
+        make_version(tmp_path, "2027-01")
+        (tmp_path / "2027-01" / "umd_assign.geojson.gz").write_bytes(b"broken")   # 좌표 단지가 없어도 검증
+        with pytest.raises(Exception):
+            versions.sync(conn)
+        assert versions.active(conn) == "2026-10"
