@@ -87,13 +87,24 @@ def assign_row(boundary, row, version, valid=frozenset(), mapping=None):
                 version=version, lon=lon, lat=lat, mismatch=mismatch)
 
 
-# 계산 뒤 좌표가 바뀐 단지는 건드리지 않는다(다음 실행에서 다시 판정)
-UPDATE = """
-UPDATE complexes SET region_umd_cd = %(umd)s, region_sgg_cd = %(sgg)s, region_match = %(match)s,
-       boundary_version = %(version)s, sgg_mismatch = %(mismatch)s
- WHERE apt_seq = %(apt_seq)s
-   AND lon IS NOT DISTINCT FROM %(lon)s::float8 AND lat IS NOT DISTINCT FROM %(lat)s::float8
-"""
+_STAGE_COLS = ("apt_seq", "umd", "sgg", "match", "version", "mismatch", "lon", "lat")
+
+
+def _bulk_update(conn, rows):
+    """판정 결과를 임시 테이블에 COPY로 올리고 UPDATE 한 번으로 반영한다(트랜잭션 안에서).
+    운영 DB가 멀리 있어 단지마다 UPDATE를 보내면 왕복 지연이 쌓인다.
+    계산 뒤 좌표가 바뀐 단지는 건드리지 않는다(다음 실행에서 다시 판정)."""
+    conn.execute("CREATE TEMP TABLE assign_stage (apt_seq TEXT PRIMARY KEY, umd TEXT, sgg TEXT, match TEXT, "
+                 "version TEXT, mismatch BOOLEAN, lon DOUBLE PRECISION, lat DOUBLE PRECISION) ON COMMIT DROP")
+    with conn.cursor() as cur, cur.copy(f"COPY assign_stage ({', '.join(_STAGE_COLS)}) FROM STDIN") as copy:
+        for r in rows:
+            copy.write_row([r[c] for c in _STAGE_COLS])
+    conn.execute("""
+        UPDATE complexes c SET region_umd_cd = s.umd, region_sgg_cd = s.sgg, region_match = s.match,
+               boundary_version = s.version, sgg_mismatch = s.mismatch
+          FROM assign_stage s
+         WHERE c.apt_seq = s.apt_seq
+           AND c.lon IS NOT DISTINCT FROM s.lon AND c.lat IS NOT DISTINCT FROM s.lat""")
 
 
 def valid_umd(conn, version):
@@ -129,8 +140,7 @@ def apply_results(conn, results):
             complexes.lock_complexes(conn)
             for hook in hooks.ON_REGION_CHANGE:   # 바뀌기 전 지역
                 hook(conn, seqs)
-            with conn.cursor() as cur:
-                cur.executemany(UPDATE, chunk)
+            _bulk_update(conn, chunk)
             for hook in hooks.ON_REGION_CHANGE:   # 바뀐 뒤 지역
                 hook(conn, seqs)
     return len(results)

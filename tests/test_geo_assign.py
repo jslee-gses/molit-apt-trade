@@ -152,3 +152,23 @@ def test_apply_results_in_batches(pg, tmp_path, monkeypatch):
         n = conn.execute("SELECT COUNT(*) AS n FROM complexes WHERE boundary_version = '2026-10'").fetchone()["n"]
     assert n == 5
     assert len(calls) == 6                    # 3묶음 × (전·후)
+
+
+def test_apply_results_uses_bulk_update(pg, monkeypatch):
+    """운영 DB가 멀리 있어 단지마다 UPDATE를 보내면 느리다: 임시 테이블 COPY + UPDATE 한 번으로 반영한다."""
+    import psycopg
+
+    def no_executemany(*a, **k):
+        raise AssertionError("executemany 금지(단건 반복 UPDATE)")
+    with pg.connection() as conn:
+        conn.execute("""INSERT INTO complexes (apt_seq, api_sgg_cd, lon, lat, geocode_status) VALUES
+            ('A', '11110', 126.955, 37.575, 'ok'), ('B', '11110', NULL, NULL, 'pending')""")
+        monkeypatch.setattr(psycopg.Cursor, "executemany", no_executemany)
+        results = [dict(apt_seq="A", umd="11110101", sgg="11110", match="within", version="v", lon=126.955, lat=37.575,
+                        mismatch=False),
+                   dict(apt_seq="B", umd="11110102", sgg="11110", match="code", version="v", lon=None, lat=None,
+                        mismatch=False)]
+        assert assign.apply_results(conn, results) == 2
+        rows = {r["apt_seq"]: r for r in conn.execute("SELECT * FROM complexes")}
+    assert (rows["A"]["region_umd_cd"], rows["A"]["boundary_version"]) == ("11110101", "v")
+    assert (rows["B"]["region_umd_cd"], rows["B"]["region_match"]) == ("11110102", "code")
