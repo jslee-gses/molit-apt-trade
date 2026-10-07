@@ -164,3 +164,34 @@ def test_read_points_zip_with_several_shp_parts(tmp_path):
     pts, stats = parcel_points.read_points([zp], {P1, P2})
     assert set(pts) == {P1, P2}
     assert stats["files"] == 1 and stats["parcels"] == 2
+
+
+def test_remap_old_code_pnu():
+    mapping = {"29110101": "12110101", "11110101": "11110101"}
+    assert parcel_points.remap("2911010100100010000", mapping) == "1211010100100010000"
+    assert parcel_points.remap("2911010123100010000", mapping) == "1211010123100010000"   # 리 코드·지번은 그대로
+    assert parcel_points.remap("1111010100100010000", mapping) is None                     # 바뀌지 않음
+    assert parcel_points.remap("4111010100100010000", mapping) is None                     # 대응표에 없음
+
+
+def test_main_finds_old_code_parcel_via_code_map(pg, tmp_path, capsys, monkeypatch):
+    """개편 전 코드로 신고된 거래(옛 PNU)는 대응표로 새 코드 PNU를 만들어 찾는다."""
+    import wiring
+    from geo import code_map
+    monkeypatch.setattr(wiring, "wire", lambda: None)
+    cm = tmp_path / "code_map.csv"
+    cm.write_text("old_emd_cd,new_emd_cd\n11999101,11110101\n", encoding="utf-8")
+    monkeypatch.setattr(code_map, "PATH", cm)
+    with pg.connection() as conn:
+        add_job(conn, "11999", "202601")
+        store.save_job(conn, "11999", "202601", [item(aptSeq="R", sggCd="11999", umdCd="10100", landCd="1",
+                                                      bonbun="0001", bubun="0000")], 1)
+        conn.execute("INSERT INTO complexes (apt_seq, api_sgg_cd, geocode_status) VALUES ('R', '11999', 'pending')")
+    zdir = tmp_path / "z"
+    zdir.mkdir()
+    make_zip(zdir, "AL_D002_11", [(P1, L_SHAPE)])
+    assert parcel_points.main(["--dir", str(zdir)]) == 0
+    assert "개편 코드로 찾음 1" in capsys.readouterr().out
+    with pg.connection() as conn:
+        r = conn.execute("SELECT geocode_status, geocode_source FROM complexes WHERE apt_seq = 'R'").fetchone()
+    assert (r["geocode_status"], r["geocode_source"]) == ("ok", "parcel")

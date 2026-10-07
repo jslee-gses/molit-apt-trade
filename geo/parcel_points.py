@@ -43,6 +43,12 @@ def targets(conn):
     return got, n
 
 
+def remap(pnu, mapping):
+    """개편 전 코드의 PNU → 대응표(geo/code_map.csv, 읍면동 8자리)로 바꾼 새 PNU. 리 코드·지번은 그대로. 바뀌지 않으면 None."""
+    new = mapping.get(pnu[:8])
+    return new + pnu[8:] if new and new != pnu[:8] else None
+
+
 def shp_sources(path):
     """zip 안의 .shp들을 GDAL 가상 경로로(큰 시도는 'AL_D002_41_…(2).shp'처럼 여러 조각). .shp 파일이면 그대로."""
     path = Path(path)
@@ -179,11 +185,22 @@ def main(argv=None):
         wanted_by_seq, n_targets = targets(conn)
     db.close_pool()      # 오래 걸리는 파일 읽기 동안 유휴 연결을 잡고 있지 않는다
 
-    points, stats = read_points(paths, set(wanted_by_seq.values()))
-    found = {s: points[p] for s, p in wanted_by_seq.items() if p in points}
+    from geo import code_map
+
+    # 개편 전 코드로 신고된 거래는 지적도(새 코드)와 PNU가 다르므로 대응표로 바꾼 PNU도 함께 찾는다
+    mapping = code_map.read()
+    alt = {s: remap(p, mapping) for s, p in wanted_by_seq.items()}
+    points, stats = read_points(paths, set(wanted_by_seq.values()) | {a for a in alt.values() if a})
+    found, via_map = {}, 0
+    for s, p in wanted_by_seq.items():
+        if p in points:
+            found[s] = points[p]
+        elif alt[s] in points:
+            found[s] = points[alt[s]]
+            via_map += 1
     pct = 100 * len(found) / n_targets if n_targets else 0.0
     print(f"zip {stats['files']}개 · 필지 {stats['parcels']:,}개 읽음 · 대상 단지 {n_targets:,} · "
-          f"PNU 없음 {n_targets - len(wanted_by_seq):,} · 찾음 {len(found):,}({pct:.1f}%) · "
+          f"PNU 없음 {n_targets - len(wanted_by_seq):,} · 찾음 {len(found):,}({pct:.1f}%, 개편 코드로 찾음 {via_map:,}) · "
           f"못 찾음 {len(wanted_by_seq) - len(found):,} · 범위 밖 {stats['dropped']:,}")
     if args.dry_run:
         print("--dry-run: 저장하지 않습니다.")
