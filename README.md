@@ -35,7 +35,7 @@ API는 과거 자료도 새 코드로만 제공하므로 개편이 있으면 이
 | `db.py`, `migrations/` | Postgres 커넥션 풀, SQL 마이그레이션(시작할 때 자동 적용) |
 | `collector/` | 국토부 API 호출(`api`), 저장(`store`), 작업 선택·배치(`jobs`), 누락 점검(`quality`) |
 | `web/` | 화면(`pages`), JSON API(`api`), 로그인(`auth`) |
-| `geo/` | 단지 등록·좌표 연결(`complexes`, `locate`), 지역 판정(`assign`), 경계 버전(`versions`), 10분 주기 처리(`pipeline`), 로컬 도구(`address_points`, `boundaries`) |
+| `geo/` | 단지 등록·좌표 상태(`complexes`), 좌표 도구(`parcel_points`, 로컬), 법정동 코드 대응표(`code_map`), 지역 판정(`assign`), 경계 버전(`versions`), 10분 주기 처리(`pipeline`), 로컬 도구(`boundaries`) |
 | `static/geo/`, `geo_data/` | 경계 버전별 화면용 GeoJSON / 판정용 폴리곤·지역 목록 |
 | `scheduler.py` | 백그라운드 수집 작업 |
 | `scripts/migrate_sqlite.py` | 옛 SQLite → Postgres 1회 이전 |
@@ -110,6 +110,6 @@ DATABASE_URL=postgresql://USER:PASS@localhost:5432/molit_seed .venv/Scripts/pyth
 색 규칙: 크기는 남색 한 가지 색의 진하기, 증감은 파랑↔빨강(상승 = 빨강). 토큰 대비는 `tests/test_ui.py`가 검사합니다.
 
 ## 지리 데이터
-좌표는 주소정보누리집 위치정보요약DB(도로명주소 매칭), 경계는 국토지리정보원 연속수치지형도 행정경계(읍면동, CC BY)로 만듭니다.
+단지 위치는 국토교통부 연속지적도형정보(필지 대표점, CC BY), 경계는 국토지리정보원 연속수치지형도 행정경계(읍면동, CC BY)로 만듭니다.
 경계 자료보다 새로운 행정구역 개편은 `geo/code_map.csv`(옛 법정동 코드 → 새 코드)로 반영합니다. 화면 하단에 경계 출처를 표시합니다(CC BY 조건).
 갱신 절차: `docs/runbooks/geo-data.md`

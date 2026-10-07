@@ -100,9 +100,14 @@ def summary(conn):
     row = conn.execute("""
         SELECT COUNT(*) AS total,
                COUNT(*) FILTER (WHERE geocode_status IN ('ok', 'manual')) AS located,
-               COUNT(*) FILTER (WHERE region_match = 'within') AS within,
+               COUNT(*) FILTER (WHERE geocode_status = 'ok' AND geocode_source = 'parcel') AS parcel,
+               COUNT(*) FILTER (WHERE geocode_status = 'manual') AS manual,
+               COUNT(*) FILTER (WHERE geocode_status = 'pending') AS pending,
+               COUNT(*) FILTER (WHERE geocode_status = 'failed') AS failed,
+               COUNT(*) FILTER (WHERE region_match IN ('within', 'nearest')) AS by_boundary,
                COUNT(*) FILTER (WHERE region_match = 'nearest') AS nearest,
-               COUNT(*) FILTER (WHERE region_match = 'none') AS outside,
+               COUNT(*) FILTER (WHERE region_match = 'code') AS by_code,
+               COUNT(*) FILTER (WHERE region_match = 'none' OR region_match IS NULL) AS unassigned,
                COUNT(*) FILTER (WHERE sgg_mismatch) AS mismatch
           FROM complexes""").fetchone()
     by_status = {r["geocode_status"]: r["n"] for r in conn.execute(

@@ -127,28 +127,32 @@
 
 <h2>단지 좌표·지역 판정</h2>
 <div class="tiles">
-  <div class="tile"><div class="k">좌표 확보 단지</div>
+  <div class="tile"><div class="k">좌표 확보 단지 (필지 · 수동)</div>
     <div class="v">{{ g.located|comma }} / {{ g.total|comma }}</div>
-    <div class="meter"><i style="width:{{ g.located_pct }}%"></i></div></div>
-  <div class="tile"><div class="k">좌표 못 찾음</div>
-    <div class="v {{ 'warn' if g.by_status.get('failed') }}">{{ g.by_status.get('failed', 0)|comma }}</div></div>
-  <div class="tile"><div class="k">경계 밖(미배정)·근접 배정</div>
-    <div class="v">{{ g.outside|comma }} · {{ g.nearest|comma }}</div></div>
-  <div class="tile"><div class="k">API 시군구 ≠ 좌표 시군구</div>
+    <div class="meter"><i style="width:{{ g.located_pct }}%"></i></div>
+    <div class="k">필지 {{ g.parcel|comma }} · 수동 {{ g.manual|comma }}</div></div>
+  <div class="tile"><div class="k">좌표 없음 (대기 · 못 찾음)</div>
+    <div class="v {{ 'warn' if g.pending or g.failed }}">{{ g.pending|comma }} · {{ g.failed|comma }}</div></div>
+  <div class="tile"><div class="k">지역 판정 (경계 · 법정동 코드 · 미판정)</div>
+    <div class="v">{{ g.by_boundary|comma }} · {{ g.by_code|comma }} · <span class="{{ 'warn' if g.unassigned }}">{{ g.unassigned|comma }}</span></div>
+    <div class="k">경계 중 근접 배정 {{ g.nearest|comma }}</div></div>
+  <div class="tile"><div class="k">신고 시군구 ≠ 좌표 시군구</div>
     <div class="v {{ 'warn' if g.mismatch }}">{{ g.mismatch|comma }}</div></div>
 </div>
+<p class="meta">좌표가 없는 단지가 쌓이면 이 PC에서 연속지적도 좌표 도구를 실행하세요(런북 docs/runbooks/geo-data.md A).
+  좌표가 없어도 법정동 코드로 읍면동을 판정하므로 집계는 빠지지 않습니다.</p>
 <p class="meta">활성 경계 {{ g.boundary_version or '없음' }} · 마지막 처리 {{ g.pipeline.last_run or '-' }}
   {% if g.pipeline.last_error %}<span class="err">· {{ g.pipeline.last_error }}</span>{% endif %}
   {% if g.pipeline.sync_error %}<span class="err">· {{ g.pipeline.sync_error }}</span>{% endif %}
   {% if g.pipeline.bootstrap_error %}<span class="err">· {{ g.pipeline.bootstrap_error }}</span>{% endif %}</p>
-{% if g.failed %}
+{% if g.failed_rows %}
 
-<h2>좌표를 찾지 못한 단지 (거래 많은 순 {{ g.failed|length }}개)</h2>
+<h2>좌표를 찾지 못한 단지 (거래 많은 순 {{ g.failed_rows|length }}개)</h2>
 <div class="wrap"><table>
   <thead><tr><th>단지</th><th>시군구코드</th><th>법정동</th><th>지번</th><th>도로명</th><th class="num">거래</th>
     <th>최근 계약일</th><th>수동 좌표 (경도, 위도)</th></tr></thead>
   <tbody>
-  {% for r in g.failed %}
+  {% for r in g.failed_rows %}
     <tr><td>{{ r.apt_nm }}</td><td>{{ r.api_sgg_cd }}</td><td>{{ r.api_umd_nm }}</td><td>{{ r.jibun }}</td>
       <td>{{ r.road_nm }}</td><td class="num">{{ r.n_trades|comma }}</td><td>{{ r.last_deal_date or '' }}</td>
       <td><input name="lon" size="10" placeholder="127.0"> <input name="lat" size="9" placeholder="37.5">
