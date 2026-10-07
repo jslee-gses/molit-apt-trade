@@ -127,13 +127,18 @@ def save(conn, found, target_seqs):
             for hook in hooks.ON_REGION_CHANGE:   # 바뀌기 전 지역
                 hook(conn, seqs)
             now = settings.now_ts()
-            with conn.cursor() as cur:
-                cur.executemany("""
-                    UPDATE complexes SET lon = %s, lat = %s, geocode_status = 'ok', geocode_source = 'parcel',
-                           geocoded_at = %s, region_sgg_cd = NULL, region_umd_cd = NULL, region_match = NULL,
-                           boundary_version = NULL, sgg_mismatch = false
-                     WHERE apt_seq = %s AND geocode_status IN ('pending', 'failed')""",
-                                [(found[s][0], found[s][1], now, s) for s in seqs])
+            # 단지마다 UPDATE를 보내면 원격 DB 왕복 지연이 쌓이므로 임시 테이블 COPY + UPDATE 한 번
+            conn.execute("CREATE TEMP TABLE parcel_stage (apt_seq TEXT PRIMARY KEY, lon DOUBLE PRECISION, "
+                         "lat DOUBLE PRECISION) ON COMMIT DROP")
+            with conn.cursor() as cur, cur.copy("COPY parcel_stage (apt_seq, lon, lat) FROM STDIN") as copy:
+                for s in seqs:
+                    copy.write_row([s, found[s][0], found[s][1]])
+            conn.execute("""
+                UPDATE complexes c SET lon = s.lon, lat = s.lat, geocode_status = 'ok', geocode_source = 'parcel',
+                       geocoded_at = %s, region_sgg_cd = NULL, region_umd_cd = NULL, region_match = NULL,
+                       boundary_version = NULL, sgg_mismatch = false
+                  FROM parcel_stage s
+                 WHERE c.apt_seq = s.apt_seq AND c.geocode_status IN ('pending', 'failed')""", (now,))
             for hook in hooks.ON_REGION_CHANGE:   # 바뀐 뒤 지역
                 hook(conn, seqs)
         missing = sorted(still - set(seqs))

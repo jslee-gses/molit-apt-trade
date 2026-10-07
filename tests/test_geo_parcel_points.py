@@ -195,3 +195,18 @@ def test_main_finds_old_code_parcel_via_code_map(pg, tmp_path, capsys, monkeypat
     with pg.connection() as conn:
         r = conn.execute("SELECT geocode_status, geocode_source FROM complexes WHERE apt_seq = 'R'").fetchone()
     assert (r["geocode_status"], r["geocode_source"]) == ("ok", "parcel")
+
+
+def test_save_uses_bulk_update(pg, monkeypatch):
+    import psycopg
+
+    def no_executemany(*a, **k):
+        raise AssertionError("executemany 금지(단건 반복 UPDATE)")
+    with pg.connection() as conn:
+        seed(conn)
+        monkeypatch.setattr(psycopg.Cursor, "executemany", no_executemany)
+        result = parcel_points.save(conn, {"A": (126.966, 37.5585), "B": (126.967, 37.559)}, ["A", "B", "C"])
+        rows = {r["apt_seq"]: r for r in conn.execute("SELECT * FROM complexes")}
+    assert result == {"located": 2, "failed": 1, "skipped": 0}
+    assert (rows["A"]["lon"], rows["A"]["geocode_source"]) == (126.966, "parcel")
+    assert (rows["B"]["lat"], rows["B"]["geocode_status"]) == (37.559, "ok")
