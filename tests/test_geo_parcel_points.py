@@ -147,3 +147,20 @@ def test_read_points_handles_self_intersecting_polygon(tmp_path):
     pts, stats = parcel_points.read_points([z], {P1})
     assert stats["matched"] + stats["dropped"] == 1
     assert stats["matched"] == 1 and P1 in pts
+
+
+def test_read_points_zip_with_several_shp_parts(tmp_path):
+    """큰 시도는 zip 하나에 AL_D002_41_…shp, AL_D002_41_…(2).shp처럼 여러 조각 SHP가 들어 있다."""
+    parts = [("AL_D002_41", [(P1, L_SHAPE)]), ("AL_D002_41(2)", [(P2, box(X0 + 200, Y0, X0 + 300, Y0 + 100))])]
+    zp = tmp_path / "AL_D002_41.zip"
+    with zipfile.ZipFile(zp, "w") as z:
+        for name, rows in parts:
+            d = tmp_path / name
+            d.mkdir()
+            gpd.GeoDataFrame({"A0": ["0"], "A1": [rows[0][0]], "A2": [rows[0][0][:10]]},
+                             geometry=[rows[0][1]], crs="EPSG:5186").to_file(d / f"{name}.shp", encoding="cp949")
+            for f in d.iterdir():
+                z.write(f, f.name)
+    pts, stats = parcel_points.read_points([zp], {P1, P2})
+    assert set(pts) == {P1, P2}
+    assert stats["files"] == 1 and stats["parcels"] == 2

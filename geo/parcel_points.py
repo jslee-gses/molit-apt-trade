@@ -43,16 +43,16 @@ def targets(conn):
     return got, n
 
 
-def shp_source(path):
-    """zip 안의 .shp를 GDAL 가상 경로로. .shp 파일이면 그대로."""
+def shp_sources(path):
+    """zip 안의 .shp들을 GDAL 가상 경로로(큰 시도는 'AL_D002_41_…(2).shp'처럼 여러 조각). .shp 파일이면 그대로."""
     path = Path(path)
     if path.suffix.lower() != ".zip":
-        return str(path)
+        return [str(path)]
     with zipfile.ZipFile(path) as z:
-        names = [n for n in z.namelist() if n.lower().endswith(".shp")]
-    if len(names) != 1:
-        raise ValueError(f"{path.name}: zip 안에 .shp가 하나여야 합니다({len(names)}개)")
-    return f"/vsizip/{path.as_posix()}/{names[0]}"
+        names = sorted(n for n in z.namelist() if n.lower().endswith(".shp"))
+    if not names:
+        raise ValueError(f"{path.name}: zip 안에 .shp가 없습니다")
+    return [f"/vsizip/{path.as_posix()}/{n}" for n in names]
 
 
 def pnu_column(src):
@@ -74,34 +74,34 @@ def read_points(paths, wanted):
 
     out, stats = {}, {"files": 0, "parcels": 0, "matched": 0, "dropped": 0}
     for path in paths:
-        src = shp_source(path)
-        col = pnu_column(src)
-        ids = pyogrio.read_dataframe(src, columns=[col], read_geometry=False, fid_as_index=True)
         stats["files"] += 1
-        stats["parcels"] += len(ids)
-        fids = ids.index[ids[col].isin(wanted)].tolist()
-        if not fids:
-            continue
-        gdf = pyogrio.read_dataframe(src, columns=[col], fids=fids)
-        if gdf.crs is None:
-            gdf = gdf.set_crs(SRC_CRS)
-        gdf["geometry"] = gdf.geometry.make_valid()          # 자기 교차 등 잘못된 도형 보정(GEOS 오류 방지)
-        empty = gdf.geometry.is_empty | gdf.geometry.isna()
-        stats["dropped"] += int(empty.sum())
-        gdf = gdf[~empty]
-        if gdf.empty:
-            continue
-        merged = gdf.dissolve(by=col)
-        pts = gpd.GeoSeries(merged.geometry.representative_point(), crs=gdf.crs).to_crs("EPSG:4326")
-        for p, geom in pts.items():
-            lon, lat = geom.x, geom.y
-            if (math.isfinite(lon) and math.isfinite(lat)
-                    and LON_RANGE[0] <= lon <= LON_RANGE[1] and LAT_RANGE[0] <= lat <= LAT_RANGE[1]):
-                if p not in out:
-                    stats["matched"] += 1
-                out[p] = (round(lon, 6), round(lat, 6))
-            else:
-                stats["dropped"] += 1
+        for src in shp_sources(path):
+            col = pnu_column(src)
+            ids = pyogrio.read_dataframe(src, columns=[col], read_geometry=False, fid_as_index=True)
+            stats["parcels"] += len(ids)
+            fids = ids.index[ids[col].isin(wanted)].tolist()
+            if not fids:
+                continue
+            gdf = pyogrio.read_dataframe(src, columns=[col], fids=fids)
+            if gdf.crs is None:
+                gdf = gdf.set_crs(SRC_CRS)
+            gdf["geometry"] = gdf.geometry.make_valid()          # 자기 교차 등 잘못된 도형 보정(GEOS 오류 방지)
+            empty = gdf.geometry.is_empty | gdf.geometry.isna()
+            stats["dropped"] += int(empty.sum())
+            gdf = gdf[~empty]
+            if gdf.empty:
+                continue
+            merged = gdf.dissolve(by=col)
+            pts = gpd.GeoSeries(merged.geometry.representative_point(), crs=gdf.crs).to_crs("EPSG:4326")
+            for p, geom in pts.items():
+                lon, lat = geom.x, geom.y
+                if (math.isfinite(lon) and math.isfinite(lat)
+                        and LON_RANGE[0] <= lon <= LON_RANGE[1] and LAT_RANGE[0] <= lat <= LAT_RANGE[1]):
+                    if p not in out:
+                        stats["matched"] += 1
+                    out[p] = (round(lon, 6), round(lat, 6))
+                else:
+                    stats["dropped"] += 1
     return out, stats
 
 
