@@ -55,6 +55,7 @@ def test_base_uses_self_hosted_assets(client):
                for s in re.findall(r'<script[^>]+src="([^"]+)"', html))
     assert 'href="/status" class="on" aria-current="page"' in html
     assert "국토지리정보원" in html and "CC BY" in html
+    assert "단지 위치: 국토교통부 연속지적도형정보(CC BY)" in html and "위치정보요약DB" not in html
 
 
 def test_font_files_served(client):

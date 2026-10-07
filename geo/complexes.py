@@ -100,19 +100,22 @@ def summary(conn):
     row = conn.execute("""
         SELECT COUNT(*) AS total,
                COUNT(*) FILTER (WHERE geocode_status IN ('ok', 'manual')) AS located,
-               COUNT(*) FILTER (WHERE region_match = 'within') AS within,
+               COUNT(*) FILTER (WHERE geocode_status = 'ok' AND geocode_source = 'parcel') AS parcel,
+               COUNT(*) FILTER (WHERE geocode_status = 'manual') AS manual,
+               COUNT(*) FILTER (WHERE geocode_status = 'pending') AS pending,
+               COUNT(*) FILTER (WHERE geocode_status = 'failed') AS failed,
+               COUNT(*) FILTER (WHERE region_match IN ('within', 'nearest')) AS by_boundary,
                COUNT(*) FILTER (WHERE region_match = 'nearest') AS nearest,
-               COUNT(*) FILTER (WHERE region_match = 'none') AS outside,
+               COUNT(*) FILTER (WHERE region_match = 'code') AS by_code,
+               COUNT(*) FILTER (WHERE region_match = 'none' OR region_match IS NULL) AS unassigned,
                COUNT(*) FILTER (WHERE sgg_mismatch) AS mismatch
           FROM complexes""").fetchone()
     by_status = {r["geocode_status"]: r["n"] for r in conn.execute(
         "SELECT geocode_status, COUNT(*) AS n FROM complexes GROUP BY 1")}
-    points = conn.execute("SELECT COUNT(*) AS n, MAX(source_month) AS month FROM address_points").fetchone()
     version = conn.execute("SELECT version FROM boundary_versions WHERE is_active").fetchone()
     total = row["total"]
     return dict(row, by_status=by_status,
                 located_pct=round(100 * row["located"] / total, 1) if total else 0.0,
-                address_points=points["n"], address_month=points["month"],
                 boundary_version=version["version"] if version else None)
 
 

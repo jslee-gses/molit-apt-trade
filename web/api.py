@@ -53,7 +53,7 @@ def manual_coords(apt_seq):
     return jsonify(ok=True)
 
 
-CACHED = {"api.regions_", "api.agg", "api.map_", "api.summary"}
+CACHED = {"api.regions_", "api.agg", "api.map_", "api.map_complexes", "api.summary"}
 
 
 @bp.errorhandler(BadParam)
@@ -96,6 +96,14 @@ def agg():
                    series=data, **{"from": ym_from, "to": ym_to})
 
 
+def _map_period():
+    """지도 기간: from/to가 있으면 검증, 없으면 확정 최근 3개월."""
+    if request.args.get("from") or request.args.get("to"):
+        return params.ym_range(request.args)
+    ym_to = queries.confirmed_ym()
+    return queries.shift_ym(ym_to, -2), ym_to
+
+
 @bp.route("/map")
 def map_():
     level = params.choice(request.args.get("level"), ("sido", "sgg", "umd"), "수준", "sido")
@@ -105,17 +113,26 @@ def map_():
     if level == "umd" and not (parent and parent.isdigit() and len(parent) == 5):
         raise BadParam("읍면동 지도는 시군구 코드(parent, 5자리)가 필요합니다.")
     band = params.choice(request.args.get("band"), [b for b, _ in params.BANDS], "면적 구간", "all")
-    if request.args.get("from") or request.args.get("to"):
-        ym_from, ym_to = params.ym_range(request.args)
-    else:
-        ym_to = queries.confirmed_ym()
-        ym_from = queries.shift_ym(ym_to, -2)
+    ym_from, ym_to = _map_period()
     with db.connection() as conn:
         version = queries.active_version(conn)
         data = queries.map_values(conn, version, level, parent if level != "sido" else None,
                                   band, ym_from, ym_to)
     return jsonify(version=version, level=level, parent=parent if level != "sido" else None, band=band,
                    **{"from": ym_from, "to": ym_to}, **data)
+
+
+@bp.route("/map/complexes")
+def map_complexes():
+    parent = request.args.get("parent") or ""
+    if not (parent.isdigit() and len(parent) == 5):
+        raise BadParam("단지 지도는 시군구 코드(parent, 5자리)가 필요합니다.")
+    band = params.choice(request.args.get("band"), [b for b, _ in params.BANDS], "면적 구간", "all")
+    ym_from, ym_to = _map_period()
+    with db.connection() as conn:
+        version = queries.active_version(conn)
+        rows = queries.complex_points(conn, parent, band, ym_from, ym_to)
+    return jsonify(version=version, parent=parent, band=band, complexes=rows, **{"from": ym_from, "to": ym_to})
 
 
 @bp.route("/summary")
@@ -138,5 +155,14 @@ def complex_detail(apt_seq):
     try:
         with db.connection() as conn:
             return jsonify(queries.complex_detail(conn, queries.active_version(conn), apt_seq))
+    except LookupError:
+        return jsonify(error="없는 단지입니다."), 404
+
+
+@bp.route("/complexes/<apt_seq>/nearby")
+def complex_nearby(apt_seq):
+    try:
+        with db.connection() as conn:
+            return jsonify(queries.nearby(conn, queries.active_version(conn), apt_seq))
     except LookupError:
         return jsonify(error="없는 단지입니다."), 404

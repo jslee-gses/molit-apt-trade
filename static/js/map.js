@@ -1,5 +1,6 @@
 // 지도: 시도 → 시군구 → 읍면동 드릴다운 단계구분도 + 오른쪽 순위 목록 카드 + 아래 지표 비교표
 // 색: 크기 지표 = 남색 7단계(--seq-*), 증감 지표 = 파랑↔회색↔빨강 5단계(--div-*, 상승 = 빨강). 지도와 순위 점이 같은 단계를 쓴다.
+// 읍면동 단계에서는 단지 위치 점(scatter, geo 좌표계)을 겹친다. 크기 = 거래량, 색 = 지표(전년 대비 지표는 단지 값이 없어 중립색).
 (async () => {
   const el = (id) => document.getElementById(id);
   const esc = App.escapeHtml;
@@ -24,7 +25,7 @@
     div: ['--div-neg-2', '--div-neg-1', '--div-mid', '--div-pos-1', '--div-pos-2'],
   };
   const NEXT = { sido: 'sgg', sgg: 'umd' };
-  const state = App.readState({ level: 'sido', parent: '', metric: 'median_price', band: 'all', from: '', to: '' });
+  const state = App.readState({ level: 'sido', parent: '', metric: 'median_price', band: 'all', from: '', to: '', pts: '1' });
   const chart = App.chart(el('map'));
   const mini = App.chart(el('mini'));
   const geoCache = {};
@@ -37,6 +38,12 @@
 
   const metricPills = App.pills(el('metric'), () => { sort = null; render(); });
   const bandPills = App.pills(el('band'), () => render());
+  const ptsPills = App.pills(el('pts'), () => render());
+  if (!ptsPills.has(state.pts)) state.pts = '1';
+  ptsPills.value = state.pts;
+  // 지표 → 단지 점 색에 쓸 /api/map/complexes 필드(전년 대비는 없음)
+  const POINT_FIELD = { median_price: 'median_price', median_ppm2: 'median_ppm2', n_trades: 'n' };
+  let points = [];
   if (!Object.hasOwn(METRICS, state.metric)) state.metric = 'median_price';
   if (!bandPills.has(state.band)) state.band = 'all';
   if (!['sido', 'sgg', 'umd'].includes(state.level)) { state.level = 'sido'; state.parent = ''; }
@@ -84,6 +91,7 @@
     const my = ++seq;
     state.metric = metricPills.value;
     state.band = bandPills.value;
+    state.pts = ptsPills.value;
     state.from = App.fromMonthInput(el('from').value) || state.from;
     state.to = App.fromMonthInput(el('to').value) || state.to;
     App.writeState(state);
@@ -93,6 +101,16 @@
       if (my !== seq) return;
       const fc = await geo(apiData.version, apiData.level, apiData.parent);
       if (my !== seq) return;
+      let pts = [];
+      let ptsFailed = false;
+      if (apiData.level === 'umd' && state.pts === '1') {
+        try {
+          pts = (await App.api('/api/map/complexes', { parent: apiData.parent, band: state.band, from: apiData.from, to: apiData.to })).complexes;
+        } catch (e) { pts = []; ptsFailed = true; }   // 점 요청 실패가 지역 지도·순위·비교표를 막지 않게 한다
+      }
+      if (my !== seq) return;
+      if (ptsFailed) App.message(el('msg'), '단지 점을 불러오지 못했습니다. 지역 지도만 표시합니다.');
+      points = pts;
       data = apiData;
       if (el('side').hidden === false && !data.values.some((v) => v.region_cd === sideCode)) el('side-drill').hidden = true;
       if (selected && !data.values.some((v) => v.region_cd === selected)) { selected = null; el('side').hidden = true; }
@@ -112,34 +130,58 @@
     } catch (e) { if (my !== seq) return; App.message(el('msg'), e.message); }
   }
 
+  function pointSize(n) { return n ? Math.max(4, Math.min(14, 3 + Math.sqrt(n) * 1.5)) : 3; }
+
+  function pointSeries() {
+    const pf = POINT_FIELD[state.metric];
+    const vals = pf ? points.map((c) => c[pf]).filter((v) => v != null).sort((a, b) => a - b) : [];
+    // 단지 값의 분위수로 7단계(지도와 같은 남색 단계)
+    const color = (v) => {
+      if (!pf || v == null || !vals.length) return App.css('--muted');
+      let lo = 0, hi = vals.length;
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (vals[mid] < v) lo = mid + 1; else hi = mid; }
+      return App.css(RAMP.seq[Math.min(RAMP.seq.length - 1, Math.floor((lo / vals.length) * RAMP.seq.length))]);
+    };
+    return {
+      type: 'scatter', coordinateSystem: 'geo', geoIndex: 0, z: 3,
+      data: points.map((c) => ({
+        value: [c.lon, c.lat], c, symbolSize: pointSize(c.n),
+        itemStyle: { color: c.n ? color(pf ? c[pf] : null) : App.css('--nodata'), borderColor: App.css('--card'), borderWidth: 1 },
+      })),
+      emphasis: { scale: 1.5, itemStyle: { borderColor: App.css('--ink'), borderWidth: 1.5 } },
+    };
+  }
+
   function drawMap(name) {
     const [title, field, f, kind] = METRICS[state.metric];
     const sc = scaleOf(kind, field);
+    const byCd = Object.fromEntries(data.values.map((v) => [v.region_cd, v]));
+    const regionTip = (v) => (v ? `<b>${esc(v.full_name)}</b><br>${title}: ${f(v[field])}<br>거래 ${cnt(v.n)}`
+      + `${state.metric.startsWith('yoy') ? '' : `<br>중위가 전년 대비 ${App.fmt.pct(v.yoy_price)}`}` : '');
+    const pointTip = (c) => (c ? `<b>${esc(c.apt_nm || c.apt_seq)}</b><br>거래 ${cnt(c.n)}<br>중위가 ${App.fmt.eok(c.median_price)}`
+      + `<br>㎡당 ${App.fmt.ppm2(c.median_ppm2)}<br><small>누르면 단지 상세</small>` : '');
+    const nameLabel = (p) => byCd[p.name]?.name ?? '';
     chart.setOption({
       tooltip: {
         trigger: 'item', backgroundColor: App.css('--card'), borderColor: App.css('--line'), textStyle: { color: App.css('--text') },
-        formatter: (p) => {
-          const v = p.data?.raw;
-          if (!v) return '';
-          return `<b>${esc(v.full_name)}</b><br>${title}: ${f(v[field])}<br>거래 ${cnt(v.n)}${state.metric.startsWith('yoy') ? '' : `<br>중위가 전년 대비 ${App.fmt.pct(v.yoy_price)}`}`;
-        },
+        formatter: (p) => (p.componentType === 'geo' ? regionTip(byCd[p.name]) : pointTip(p.data?.c)),
       },
-      series: [{
-        type: 'map', map: name, nameProperty: 'region_cd', roam: true, selectedMode: 'single',
-        top: 12, bottom: 12, left: 8, right: 8,
-        data: data.values.map((v) => {
+      geo: {
+        map: name, nameProperty: 'region_cd', roam: true, selectedMode: 'single',
+        top: 12, bottom: 12, left: 8, right: 8, tooltip: { show: true },
+        regions: data.values.map((v) => {
           const c = colorFor(v[field], kind, sc);
-          return { name: v.region_cd, value: v[field], raw: v, itemStyle: { areaColor: c },
-            emphasis: { itemStyle: { areaColor: c } }, select: { itemStyle: { areaColor: c } } };
+          return { name: v.region_cd, itemStyle: { areaColor: c }, emphasis: { itemStyle: { areaColor: c } }, select: { itemStyle: { areaColor: c } } };
         }),
         itemStyle: { areaColor: App.css('--nodata'), borderColor: App.css('--card'), borderWidth: 1 },
-        emphasis: { label: { show: true, color: App.css('--text'), formatter: (p) => p.data?.raw?.name ?? '' },
+        emphasis: { label: { show: true, color: App.css('--text'), formatter: nameLabel },
           itemStyle: { borderColor: App.css('--ink'), borderWidth: 2 } },
-        select: { label: { show: true, color: App.css('--text'), formatter: (p) => p.data?.raw?.name ?? '' },
+        select: { label: { show: true, color: App.css('--text'), formatter: nameLabel },
           itemStyle: { borderColor: App.css('--ink'), borderWidth: 2.5 } },
-      }],
+      },
+      series: points.length ? [pointSeries()] : [],
     }, true);
-    if (selected) chart.dispatchAction({ type: 'select', seriesIndex: 0, name: selected });
+    if (selected) chart.dispatchAction({ type: 'geoSelect', geoIndex: 0, name: selected });
   }
 
   function drawCrumbs() {
@@ -208,14 +250,15 @@
 
   function drawNote() {
     el('note').textContent = `${data.values.length}개 지역 · ${App.fmt.ym(data.from)}~${App.fmt.ym(data.to)} · 가격은 월별 중위가의 거래량 가중평균 · 전년 대비는 ${App.fmt.ym(data.prev_from)}~${App.fmt.ym(data.prev_to)}와 비교`
-      + (data.coverage == null ? '' : ` · 읍면동 커버리지 ${data.coverage}% (좌표가 있는 단지의 거래 비율)`);
+      + (data.coverage == null ? '' : ` · 읍면동 커버리지 ${data.coverage}% (읍면동이 판정된 단지의 거래 비율)`)
+      + (data.level === 'umd' && state.pts === '1' ? ` · 단지 점 ${points.length}개(좌표가 있는 단지)` : '');
   }
 
   function select(code) {
     const v = data.values.find((x) => x.region_cd === code);
     if (!v) return;
     selected = code;
-    chart.dispatchAction({ type: 'select', seriesIndex: 0, name: code });
+    chart.dispatchAction({ type: 'geoSelect', geoIndex: 0, name: code });
     el('ranking').querySelectorAll('.rank-item').forEach((b) => { b.classList.toggle('on', b.dataset.cd === code); b.setAttribute('aria-pressed', String(b.dataset.cd === code)); });
     showMini(v);
   }
@@ -253,7 +296,13 @@
   }
 
   chart.on('click', (p) => {
-    const v = p.data?.raw;
+    if (p.componentType === 'series' && p.seriesType === 'scatter') {
+      const c = p.data?.c;
+      if (c) location.href = `/complexes/${encodeURIComponent(c.apt_seq)}`;
+      return;
+    }
+    if (p.componentType !== 'geo') return;
+    const v = data.values.find((x) => x.region_cd === p.name);
     if (!v) return;
     if (NEXT[state.level]) {
       showMini(v);

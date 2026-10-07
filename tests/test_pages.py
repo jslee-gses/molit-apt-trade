@@ -50,6 +50,8 @@ def test_map_page(client, seeded):
     assert 'id="compare"' in html and 'class="data-table"' in html and 'id="rank-q"' in html
     assert 'data-value="yoy_n" aria-pressed="false"' in html and 'data-value="median_price" aria-pressed="true"' in html
     assert 'data-value="le60"' in html and "<select" not in html
+    assert 'id="pts" role="group"' in html and 'data-value="1" aria-pressed="true"' in html
+    assert "단지 표시" in html
 
 
 def test_complexes_search_page(client, seeded):
@@ -67,6 +69,10 @@ def test_complex_page(client, seeded):
     html = client.get("/complexes/A").get_data(as_text=True)
     assert "청운아파트" in html and "서울특별시 종로구 청운동" in html and 'id="scatter"' in html
     assert "<h1>청운아파트</h1>" in html and 'class="data-table"' in html and 'class="badge' in html
+    assert 'id="loc"' in html and "지역 판정: 경계" in html and "위치: 수동" not in html
+    assert "126.955" not in html and "37.575" not in html          # 좌표 숫자를 화면에 쓰지 않는다
+    c = client.get("/complexes/C").get_data(as_text=True)
+    assert 'id="loc"' not in c and "위치 정보 없음" in c and "지역 판정: 미판정" in c
     assert client.get("/complexes/ZZZ").status_code == 404
 
 

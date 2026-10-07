@@ -7,10 +7,21 @@
   <span class="badge">신고 법정동 {{ c.api_umd_nm or '-' }}</span>
   <span class="badge">지번 {{ c.jibun or '-' }}{% if c.road_nm %} · {{ c.road_nm }}{% endif %}</span>
   <span class="badge">건축 {{ c.build_year or '-' }}년</span>
-  <span class="badge">좌표 {% if c.lon is not none %}{{ '%.5f'|format(c.lon) }}, {{ '%.5f'|format(c.lat) }} ({{ c.geocode_status }}{% if c.region_match %}, {{ c.region_match }}{% endif %}){% else %}없음 ({{ c.geocode_status }}){% endif %}</span>
+  {% set match_label = {'within': '경계', 'nearest': '경계(근접)', 'code': '법정동 코드'} %}
+  <span class="badge">지역 판정: {{ match_label.get(c.region_match, '미판정') }}</span>
+  <span class="badge">위치: {% if c.geocode_status == 'manual' %}수동{% elif c.geocode_status == 'ok' and c.lon is not none %}필지{% else %}없음{% endif %}</span>
   {% if c.sgg_mismatch %}<span class="badge warn">신고 시군구와 좌표 시군구가 다름</span>{% endif %}
 </div>
 <p id="msg" class="meta"></p>
+<section class="card">
+  <h2 class="card-title">위치</h2>
+  {% if c.lon is not none and c.geocode_status in ('ok', 'manual') %}
+  <div id="loc" class="chart small"></div>
+  <p class="table-foot">같은 읍면동 단지(회색)와 이 단지(강조). 점을 누르면 그 단지로 갑니다. 단지 위치는 필지 대표점입니다.</p>
+  {% else %}
+  <p class="meta">위치 정보 없음(좌표 미확보)</p>
+  {% endif %}
+</section>
 <section class="card"><h2 class="card-title">거래 가격 (해제 제외)</h2><div id="scatter" class="chart"></div></section>
 <div class="grid-2">
   <section class="card"><h2 class="card-title">면적 구간별 거래 수</h2><div id="areas" class="chart small"></div></section>

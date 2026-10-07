@@ -180,7 +180,7 @@ def _region_filter(region):
 
 _COMPLEX_SELECT = """
     SELECT c.apt_seq, c.apt_nm, c.build_year, c.last_deal_date, c.api_umd_nm, c.jibun, c.road_nm,
-           c.lon, c.lat, c.geocode_status, c.region_match, c.sgg_mismatch,
+           c.lon, c.lat, c.geocode_status, c.geocode_source, c.region_match, c.region_umd_cd, c.sgg_mismatch,
            COALESCE(ru.full_name, rs.full_name) AS region_name
       FROM complexes c
       LEFT JOIN regions ru ON ru.boundary_version = %s AND ru.region_cd = c.region_umd_cd
@@ -208,3 +208,46 @@ def complex_detail(conn, version, apt_seq):
           FROM trades WHERE apt_seq = %s
          ORDER BY deal_date DESC NULLS LAST, id DESC LIMIT 2000""", (apt_seq,)).fetchall()
     return dict(complex=row, trades=trades)
+
+
+_BAND_SQL = {
+    "all": "TRUE",
+    "le60": "t.exclu_use_ar <= 60",
+    "60_85": "t.exclu_use_ar > 60 AND t.exclu_use_ar <= 85",
+    "gt85": "t.exclu_use_ar > 85",
+}
+
+
+def complex_points(conn, sgg, band, ym_from, ym_to):
+    """시군구 안 좌표 있는 단지와 기간 거래(해제 제외) 건수·중위가·㎡당 중위가. 거래가 없으면 n=0, 값 None."""
+    return conn.execute(f"""
+        SELECT c.apt_seq, c.apt_nm, c.lon, c.lat, COUNT(t.id)::int AS n,
+               percentile_cont(0.5) WITHIN GROUP (ORDER BY t.deal_amount::float8) AS median_price,
+               percentile_cont(0.5) WITHIN GROUP (
+                   ORDER BY CASE WHEN t.exclu_use_ar > 0 THEN t.deal_amount::float8 / t.exclu_use_ar::float8 END)
+                   AS median_ppm2
+          FROM complexes c
+          LEFT JOIN trades t ON t.apt_seq = c.apt_seq AND t.deal_ymd BETWEEN %s AND %s
+               AND NOT t.is_cancelled AND t.deal_amount IS NOT NULL AND ({_BAND_SQL[band]})
+         WHERE c.region_sgg_cd = %s AND c.geocode_status IN ('ok', 'manual')
+           AND c.lon IS NOT NULL AND c.lat IS NOT NULL
+         GROUP BY c.apt_seq, c.apt_nm, c.lon, c.lat
+         ORDER BY c.apt_seq""", (ym_from, ym_to, sgg)).fetchall()
+
+
+def nearby(conn, version, apt_seq, limit=500):
+    """같은 읍면동의 좌표 있는 단지(자기 자신 먼저). 지역 미판정이면 빈 목록."""
+    me = conn.execute("SELECT region_umd_cd FROM complexes WHERE apt_seq = %s", (apt_seq,)).fetchone()
+    if not me:
+        raise LookupError(apt_seq)
+    umd = me["region_umd_cd"]
+    if not umd:
+        return dict(version=version, umd_cd=None, umd_name=None, complexes=[])
+    name = conn.execute("SELECT full_name FROM regions WHERE boundary_version = %s AND region_cd = %s",
+                        (version, umd)).fetchone()
+    rows = conn.execute("""
+        SELECT apt_seq, apt_nm, lon, lat, apt_seq = %s AS is_self FROM complexes
+         WHERE region_umd_cd = %s AND geocode_status IN ('ok', 'manual') AND lon IS NOT NULL AND lat IS NOT NULL
+         ORDER BY (apt_seq = %s) DESC, last_deal_date DESC NULLS LAST, apt_seq LIMIT %s""",
+                        (apt_seq, umd, apt_seq, limit)).fetchall()
+    return dict(version=version, umd_cd=umd, umd_name=name["full_name"] if name else None, complexes=rows)

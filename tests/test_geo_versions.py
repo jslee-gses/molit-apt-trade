@@ -3,7 +3,7 @@ from datetime import datetime
 import pytest
 
 import settings
-from geo import assign, hooks, pipeline, versions
+from geo import assign, code_map, hooks, pipeline, versions
 from tests.geo_fixtures import make_version
 
 
@@ -11,6 +11,7 @@ from tests.geo_fixtures import make_version
 def setup(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "now_kst", lambda: datetime(2026, 10, 3, 7, 0, tzinfo=settings.KST))
     monkeypatch.setattr(assign, "GEO_DATA", tmp_path)
+    monkeypatch.setattr(code_map, "PATH", tmp_path / "code_map.csv")
     monkeypatch.setattr(hooks, "ON_REGION_CHANGE", [])
     monkeypatch.setattr(hooks, "BEFORE_ACTIVATE", [])
     monkeypatch.setattr(hooks, "AFTER_ACTIVATE", [])
@@ -71,7 +72,7 @@ def test_switch_failure_keeps_old_version(pg, tmp_path):
 
 def test_pipeline_run_end_to_end(pg, tmp_path, monkeypatch):
     from collector import store
-    from geo import address_points
+    from geo import complexes
     from tests.helpers import add_job, item
 
     make_version(tmp_path, "2026-10")
@@ -81,14 +82,17 @@ def test_pipeline_run_end_to_end(pg, tmp_path, monkeypatch):
         add_job(conn, "11110", "202601")
         monkeypatch.setattr(store, "AFTER_SAVE", [])        # 단지는 pipeline의 bootstrap이 만든다
         store.save_job(conn, "11110", "202601", [item(aptSeq="A")], 1)
-        address_points.load(conn, [("111104100135|0|1|0", 126.955, 37.575, "가")], "202609")
-    pipeline.run()
+    pipeline.run()                                          # 단지 생성
+    with pg.connection() as conn:
+        complexes.set_manual(conn, "A", 126.955, 37.575)
+    pipeline.run()                                          # 좌표로 판정
     with pg.connection() as conn:
         a = conn.execute("SELECT * FROM complexes").fetchone()
-    assert (a["geocode_status"], a["region_umd_cd"]) == ("ok", "11110101")
+    assert (a["geocode_status"], a["region_umd_cd"], a["region_match"]) == ("manual", "11110101", "within")
     assert pipeline.state["last_error"] is None
     assert pipeline.state["last_result"]["assigned"] == 1
-    assert ran == [True]
+    assert "located" not in pipeline.state["last_result"]
+    assert ran == [True, True]
 
 
 def test_switch_skips_complex_changed_after_staging(pg, tmp_path):
@@ -147,3 +151,49 @@ def test_pipeline_sync_failure_does_not_block_and_backs_off(pg, tmp_path):
     assert pipeline.state["last_attempt"] is not None
     pipeline.run()                                   # 1시간 안: 다시 시도하지 않는다
     assert calls == ["2027-01"]
+
+
+def test_switch_reassigns_code_complexes(pg, tmp_path):
+    make_version(tmp_path, "2026-10")
+    with pg.connection() as conn:
+        conn.execute("""INSERT INTO complexes (apt_seq, api_sgg_cd, api_umd_cd, geocode_status) VALUES
+            ('K', '11110', '10100', 'pending')""")
+        versions.sync(conn)
+        k = conn.execute("SELECT * FROM complexes").fetchone()
+        assert (k["region_umd_cd"], k["region_match"], k["boundary_version"]) == ("11110101", "code", "2026-10")
+        make_version(tmp_path, "2027-01", {"11110103": (126.95, 37.57, 126.96, 37.58)})
+        versions.sync(conn)
+        k = conn.execute("SELECT * FROM complexes").fetchone()
+    assert (k["region_umd_cd"], k["region_match"], k["boundary_version"]) == (None, "none", "2027-01")
+
+
+def test_pipeline_reassigns_when_code_map_changes(pg, tmp_path):
+    make_version(tmp_path, "2026-10")
+    (tmp_path / "code_map.csv").write_text("old_emd_cd,new_emd_cd\n", encoding="utf-8")
+    with pg.connection() as conn:
+        conn.execute("""INSERT INTO complexes (apt_seq, api_sgg_cd, api_umd_cd, geocode_status) VALUES
+            ('K', '11999', '10100', 'pending')""")
+    pipeline.run()
+    with pg.connection() as conn:
+        assert conn.execute("SELECT region_match FROM complexes").fetchone()["region_match"] == "none"
+    pipeline.run()                                             # 대응표 그대로 → 재판정 없음
+    assert pipeline.state["code_map_reset"] is False
+    (tmp_path / "code_map.csv").write_text("old_emd_cd,new_emd_cd\n11999101,11140101\n", encoding="utf-8")
+    pipeline.run()
+    assert pipeline.state["code_map_reset"] is True
+    with pg.connection() as conn:
+        k = conn.execute("SELECT * FROM complexes").fetchone()
+        flags = [r["name"] for r in conn.execute("SELECT name FROM app_flags WHERE name LIKE 'code_map:%'")]
+    assert (k["region_umd_cd"], k["region_match"]) == ("11140101", "code")
+    assert len(flags) == 1
+
+
+def test_switch_rejects_broken_boundary_even_without_located_complexes(pg, tmp_path):
+    make_version(tmp_path, "2026-10")
+    with pg.connection() as conn:
+        versions.sync(conn)
+        make_version(tmp_path, "2027-01")
+        (tmp_path / "2027-01" / "umd_assign.geojson.gz").write_bytes(b"broken")   # 좌표 단지가 없어도 검증
+        with pytest.raises(Exception):
+            versions.sync(conn)
+        assert versions.active(conn) == "2026-10"

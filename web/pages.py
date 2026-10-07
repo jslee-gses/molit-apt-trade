@@ -75,7 +75,7 @@ def trades():
 @bp.route("/status")
 def status():
     with db.connection() as conn:
-        g = dict(complexes.summary(conn), failed=complexes.failed(conn), pipeline=pipeline.state)
+        g = dict(complexes.summary(conn), failed_rows=complexes.failed(conn), pipeline=pipeline.state)
         agg = aggregates.status(conn)
     return render_template(
         "status.html", p=jobs.progress(), q=quality.quality_report(), g=g, agg=agg, start_ymd=settings.START_YMD,

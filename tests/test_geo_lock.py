@@ -6,7 +6,7 @@ import pytest
 
 import settings
 from collector import api
-from geo import assign, complexes, hooks, locate, pipeline, versions
+from geo import assign, complexes, hooks, pipeline, versions
 from tests.geo_fixtures import make_version
 from tests.helpers import item
 
@@ -74,12 +74,6 @@ def test_apply_results_takes_lock(pg, other):
         assert _try_lock(other) is True
 
 
-def test_locate_pending_takes_lock(pg, other):
-    with pg.connection() as a, a.transaction():
-        locate.locate_pending(a)
-        assert _try_lock(other) is False
-
-
 def test_set_manual_takes_lock(pg, other):
     with pg.connection() as a:
         _seed(a)
@@ -120,8 +114,17 @@ def test_pipeline_bootstrap_failure_isolated(pg, tmp_path, monkeypatch):
     assert pipeline.state["last_result"]["added"] == 0
 
 
-def test_address_points_load_takes_lock(pg, other):
-    from geo import address_points
-    with pg.connection() as a, a.transaction():
-        address_points.load(a, [("11110|사직로|161|0", 126.955, 37.575, None)], "202609")
-        assert _try_lock(other) is False
+def test_pipeline_assign_failure_isolated(pg, tmp_path, monkeypatch):
+    make_version(tmp_path, "2026-10")          # 활성 버전이 있어야 판정 단계가 실행된다
+    ran = []
+    pipeline.AFTER_RUN.append(lambda conn: ran.append(True))
+
+    def boom(conn, version, boundary=None):
+        raise RuntimeError("판정 실패")
+    monkeypatch.setattr(assign, "assign_pending", boom)
+    pipeline.state["assign_error"] = None
+    pipeline.run()
+    assert "판정 실패" in pipeline.state["assign_error"]
+    assert pipeline.state["last_error"] is None
+    assert ran == [True]
+    assert pipeline.state["last_result"]["assigned"] == 0

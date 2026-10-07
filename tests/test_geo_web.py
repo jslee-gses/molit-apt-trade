@@ -15,10 +15,11 @@ def setup(monkeypatch):
 @pytest.fixture
 def seeded(pg):
     with pg.connection() as conn:
-        conn.execute("""INSERT INTO complexes (apt_seq, apt_nm, api_sgg_cd, geocode_status, region_sgg_cd,
-                            region_umd_cd, region_match, boundary_version) VALUES
-            ('A', '가단지', '11110', 'ok', '11110', '11110101', 'within', '2026-10'),
-            ('B', '나단지', '11110', 'failed', NULL, NULL, NULL, NULL)""")
+        conn.execute("""INSERT INTO complexes (apt_seq, apt_nm, api_sgg_cd, geocode_status, geocode_source, lon, lat,
+                            region_sgg_cd, region_umd_cd, region_match, boundary_version) VALUES
+            ('A', '가단지', '11110', 'ok', 'parcel', 126.95, 37.57, '11110', '11110101', 'within', '2026-10'),
+            ('B', '나단지', '11110', 'failed', NULL, NULL, NULL, '11110', '11110102', 'code', '2026-10'),
+            ('P', '다단지', '11110', 'pending', NULL, NULL, NULL, NULL, NULL, 'none', '2026-10')""")
 
 
 def test_set_manual(pg, seeded):
@@ -48,9 +49,18 @@ def test_summary_and_failed(pg, seeded):
     with pg.connection() as conn:
         s = complexes.summary(conn)
         f = complexes.failed(conn)
-    assert s["total"] == 2 and s["by_status"] == {"ok": 1, "failed": 1}
-    assert s["located_pct"] == 50.0 and s["within"] == 1
+    assert s["total"] == 3 and s["by_status"] == {"ok": 1, "failed": 1, "pending": 1}
+    assert (s["parcel"], s["manual"], s["pending"], s["failed"]) == (1, 0, 1, 1)
+    assert (s["by_boundary"], s["by_code"], s["unassigned"]) == (1, 1, 1)
+    assert s["located"] == 1 and s["located_pct"] == 33.3
     assert [r["apt_seq"] for r in f] == ["B"] and f[0]["n_trades"] == 0
+
+
+def test_summary_has_no_address_points(pg, seeded):
+    with pg.connection() as conn:
+        s = complexes.summary(conn)
+        assert "address_points" not in s
+        assert conn.execute("SELECT to_regclass('address_points') AS t").fetchone()["t"] is None
 
 
 def test_manual_coords_api(client, seeded):
@@ -72,6 +82,7 @@ def test_manual_coords_rejects_bad_values(client, seeded, pg):
 def test_status_page_shows_geo(client, seeded):
     html = client.get("/status").get_data(as_text=True)
     assert "단지 좌표·지역 판정" in html and "나단지" in html
+    assert "법정동 코드" in html and "런북" in html and "위치정보요약DB" not in html
 
 
 def test_failed_ranks_candidates_by_recent_deal_before_counting(pg):
