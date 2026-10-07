@@ -47,6 +47,10 @@
   if (!Object.hasOwn(METRICS, state.metric)) state.metric = 'median_price';
   if (!bandPills.has(state.band)) state.band = 'all';
   if (!['sido', 'sgg', 'umd'].includes(state.level)) { state.level = 'sido'; state.parent = ''; }
+  // 주소의 수준·상위 코드 자릿수가 맞지 않으면(이전 오류로 남은 주소 등) 전국으로
+  if ((state.level === 'sgg' && !/^\d{2}$/.test(state.parent)) || (state.level === 'umd' && !/^\d{5}$/.test(state.parent))) {
+    state.level = 'sido'; state.parent = '';
+  }
   if (state.level !== 'sido' && !state.parent) state.level = 'sido';
   metricPills.value = state.metric;
   bandPills.value = state.band;
@@ -304,9 +308,11 @@
     if (p.componentType !== 'geo') return;
     const v = data.values.find((x) => x.region_cd === p.name);
     if (!v) return;
-    if (NEXT[state.level]) {
+    // 지금 그려진 지도(data.level) 기준으로 내려간다. 새 지도가 그려지기 전 두 번째 클릭(더블클릭)이
+    // state.level(이미 다음 단계)로 계산되면 시도 코드로 읍면동을 요청해 400이 난다.
+    if (NEXT[data.level]) {
       showMini(v);
-      state.parent = v.region_cd; state.level = NEXT[state.level];
+      state.parent = v.region_cd; state.level = NEXT[data.level];
       selected = null; el('rank-q').value = '';
       render();
     } else {
