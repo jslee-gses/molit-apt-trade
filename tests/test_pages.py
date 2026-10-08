@@ -63,6 +63,28 @@ def test_complexes_search_page(client, seeded):
     assert '<meta name="vworld-key"' in html
 
 
+def test_complexes_region_selects(client, seeded):
+    """지역은 시도 → 시군구 → 읍면동 선택 상자. 고른 시군구·읍면동의 단지는 목록에 모두 나온다."""
+    html = client.get("/complexes").get_data(as_text=True)
+    assert '<select name="sido"' in html and '<option value="11">서울특별시</option>' in html
+    assert '<select name="sgg"' in html and '<select name="umd"' in html and 'name="region"' not in html
+    assert "최근 거래 순 최대 50개" in html
+    html = client.get("/complexes?sido=11&sgg=11110").get_data(as_text=True)
+    assert '<option value="11" selected>서울특별시</option>' in html
+    assert '<option value="11110" selected>종로구</option>' in html and '<option value="11110101">청운동</option>' in html
+    assert "청운아파트" in html and "신교빌" in html and "무교타워" not in html
+    assert "이 지역 단지 모두" in html
+    html = client.get("/complexes?sido=11&sgg=11110&umd=11110102").get_data(as_text=True)
+    assert "신교빌" in html and "청운아파트" not in html
+    assert '"region": "11110102"' in html                       # 지도도 같은 지역
+
+
+def test_complexes_mismatched_selects_use_consistent_part(client, seeded):
+    """상위를 바꿨는데 하위 값이 남은 주소(예: sido=26&sgg=11110)는 상위에 속하지 않는 하위를 버린다."""
+    html = client.get("/complexes?sido=26&sgg=11110&umd=11110101").get_data(as_text=True)
+    assert '"region": "26"' in html and "청운아파트" not in html
+
+
 def test_complexes_bad_region(client, seeded):
     html = client.get("/complexes?region=1").get_data(as_text=True)
     assert "지역 코드는" in html

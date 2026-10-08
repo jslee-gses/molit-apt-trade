@@ -98,15 +98,28 @@ def download():
 
 @bp.route("/complexes")
 def complexes_page():
-    q, region = request.args.get("q", "").strip(), request.args.get("region", "").strip()
-    rows, error = [], None
+    q = request.args.get("q", "").strip()
+    sido, sgg, umd = (request.args.get(k, "").strip() for k in ("sido", "sgg", "umd"))
+    # 상위를 바꿨는데 하위 값이 남은 경우: 상위에 속하지 않는 하위는 버린다
+    if sgg and not (sido and sgg.startswith(sido)):
+        sgg = ""
+    if umd and not (sgg and umd.startswith(sgg)):
+        umd = ""
+    region = umd or sgg or sido or request.args.get("region", "").strip()
+    rows, error, opts = [], None, dict(sido=[], sgg=[], umd=[])
+    # 시군구·읍면동을 고르면 그 지역 단지를 모두, 아니면 최근 거래 순 50개
+    all_rows = len(region) in (5, 8)
     try:
         with db.connection() as conn:
             version = queries.active_version(conn)
-            rows = queries.search_complexes(conn, version, q or None, region or None)
+            opts["sido"] = queries.regions(conn, version, "sido")
+            opts["sgg"] = queries.regions(conn, version, "sgg", sido) if sido else []
+            opts["umd"] = queries.regions(conn, version, "umd", sgg) if sgg else []
+            rows = queries.search_complexes(conn, version, q or None, region or None, limit=None if all_rows else 50)
     except (BadParam, queries.NotReady) as e:
         error = str(e)
-    return render_template("complexes.html", p=jobs.progress(), rows=rows, q=q, region=region, error=error)
+    return render_template("complexes.html", p=jobs.progress(), rows=rows, q=q, region=region, error=error,
+                           sel=dict(sido=sido, sgg=sgg, umd=umd), opts=opts, all_rows=all_rows)
 
 
 @bp.route("/complexes/<apt_seq>")

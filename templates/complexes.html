@@ -1,15 +1,38 @@
 {% extends "base.html" %}
 {% import "_ui.html" as ui %}
 {% block title %}단지 · 아파트 실거래가{% endblock %}
-{% block page_head %}{{ ui.page_head('단지 검색', '단지명이나 지역 코드로 찾아 거래 이력과 면적·층 분포를 봅니다.') }}{% endblock %}
+{% block page_head %}{{ ui.page_head('단지 검색', '시도 → 시군구 → 읍면동을 고르거나 단지명으로 찾아 위치와 거래 이력을 봅니다.') }}{% endblock %}
 {% block body %}
-<form class="card filters" method="get">
-  <div class="filter-row">
-    <input type="search" name="q" value="{{ q }}" placeholder="단지명" aria-label="단지명">
-    <input type="text" name="region" value="{{ region }}" placeholder="지역 코드(시도 2·시군구 5·읍면동 8자리)" aria-label="지역 코드" style="flex:0 1 300px">
+{% macro region_select(name, label, placeholder, items, value) %}
+<select name="{{ name }}" aria-label="{{ label }}" data-level="{{ name }}">
+  <option value="">{{ placeholder }}</option>
+  {% for r in items %}<option value="{{ r.region_cd }}"{% if r.region_cd == value %} selected{% endif %}>{{ r.name }}</option>{% endfor %}
+</select>
+{% endmacro %}
+<form class="card filters" method="get" id="search-form">
+  <div class="filter-row"><span class="filter-label">지역</span>
+    {{ region_select('sido', '시도', '시도 전체', opts.sido, sel.sido) }}
+    {{ region_select('sgg', '시군구', '시군구 전체', opts.sgg, sel.sgg) }}
+    {{ region_select('umd', '읍면동', '읍면동 전체', opts.umd, sel.umd) }}
+  </div>
+  <div class="filter-row"><span class="filter-label">단지명</span>
+    <input type="search" name="q" value="{{ q }}" placeholder="단지명(선택한 지역 안에서)" aria-label="단지명">
     <button class="primary">검색</button>
   </div>
 </form>
+<script>
+// 지역을 고르면 바로 검색한다. 상위를 바꾸면 하위 선택은 지운다.
+(() => {
+  const f = document.getElementById('search-form');
+  const order = ['sido', 'sgg', 'umd'];
+  f.querySelectorAll('select[data-level]').forEach((s) => {
+    s.addEventListener('change', () => {
+      for (const lv of order.slice(order.indexOf(s.dataset.level) + 1)) f.elements[lv].value = '';
+      f.submit();
+    });
+  });
+})();
+</script>
 {% if error %}<p class="err">{{ error }}</p>{% endif %}
 <p id="msg" class="meta"></p>
 <section class="card">
@@ -28,7 +51,7 @@
   {% endfor %}
   </tbody>
 </table></div>
-<p class="table-foot">{{ rows|length }}개 단지 · 최근 거래 순 최대 50개</p>
+<p class="table-foot">{{ rows|length }}개 단지 · {{ '이 지역 단지 모두' if all_rows else '최근 거래 순 최대 50개(시군구나 읍면동을 고르면 모두)' }}</p>
 {% endblock %}
 {% block scripts %}{% include "_basemap.html" %}<script src="{{ url_for('static', filename='js/common.js') }}"></script>
 <script>window.SEARCH = {{ {'q': q, 'region': region}|tojson }};</script>

@@ -135,6 +135,13 @@ def test_complex_locations(client, seeded):
     assert seqs("?region=11110") == {"A", "B"}
     assert seqs("?region=11140") == set()                     # C는 좌표 없음
     assert seqs("") == {"A", "B"}
+
+
+def test_complex_locations_nation_limited_to_recent(client, seeded, monkeypatch):
+    """조건 없는 전국 보기는 최근 거래 순 NATION_LIMIT개만, 지역·단지명 조건이 있으면 모두."""
+    monkeypatch.setattr(queries, "NATION_LIMIT", 1)
+    assert len(client.get("/api/complexes/locations").get_json()["complexes"]) == 1
+    assert len(client.get("/api/complexes/locations?region=11").get_json()["complexes"]) == 2
     resp = client.get("/api/complexes/locations")
     assert "max-age=600" in resp.headers["Cache-Control"]
     assert client.get("/api/complexes/locations?region=1").status_code == 400
