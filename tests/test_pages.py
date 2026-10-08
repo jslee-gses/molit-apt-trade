@@ -90,6 +90,18 @@ def test_complexes_bad_region(client, seeded):
     assert "지역 코드는" in html
 
 
+def test_complex_page_breadcrumb_back_to_regions(client, seeded):
+    """단지 상세에서 판정된 행정구역 단계로 돌아가는 경로(단지 검색의 지역 선택 상태로)."""
+    html = client.get("/complexes/A").get_data(as_text=True)
+    assert 'class="page-crumbs"' in html
+    assert 'href="/complexes">단지</a>' in html
+    assert 'href="/complexes?sido=11">서울특별시</a>' in html
+    assert 'href="/complexes?sido=11&amp;sgg=11110">종로구</a>' in html
+    assert 'href="/complexes?sido=11&amp;sgg=11110&amp;umd=11110101">청운동</a>' in html
+    c = client.get("/complexes/C").get_data(as_text=True)      # 읍면동 미판정: 신고 시군구까지
+    assert 'href="/complexes?sido=11&amp;sgg=11140">중구</a>' in c and "umd=" not in c.split('class="page-crumbs"')[1].split("</nav>")[0]
+
+
 def test_complex_page(client, seeded):
     html = client.get("/complexes/A").get_data(as_text=True)
     assert "청운아파트" in html and "서울특별시 종로구 청운동" in html and 'id="scatter"' in html

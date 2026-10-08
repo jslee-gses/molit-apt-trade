@@ -172,6 +172,9 @@ a.rank-item { grid-template-columns:48px minmax(0,1fr) auto; }
 .rank-card .rank-list { overflow-y:auto; min-height:0; flex:1 1 auto; }
 .crumbs { margin-left:auto; color:var(--muted); font-size:14px; }
 .crumbs b { color:var(--ink); }
+.page-crumbs { display:flex; flex-wrap:wrap; gap:6px; align-items:center; color:var(--muted); font-size:14px; margin:0 0 10px; }
+.page-crumbs a { font-weight:600; }
+.page-crumbs b { color:var(--ink); }
 .legend-bar { display:flex; flex-direction:column; gap:4px; }
 .ramp { display:flex; height:8px; overflow:hidden; }
 .ramp i { flex:1; }

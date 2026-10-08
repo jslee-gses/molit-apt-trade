@@ -180,7 +180,8 @@ def _region_filter(region):
 
 _COMPLEX_SELECT = """
     SELECT c.apt_seq, c.apt_nm, c.build_year, c.last_deal_date, c.api_umd_nm, c.jibun, c.road_nm,
-           c.lon, c.lat, c.geocode_status, c.geocode_source, c.region_match, c.region_umd_cd, c.sgg_mismatch,
+           c.lon, c.lat, c.geocode_status, c.geocode_source, c.region_match, c.region_umd_cd, c.region_sgg_cd,
+           c.api_sgg_cd, c.sgg_mismatch,
            COALESCE(ru.full_name, rs.full_name) AS region_name
       FROM complexes c
       LEFT JOIN regions ru ON ru.boundary_version = %s AND ru.region_cd = c.region_umd_cd
@@ -208,7 +209,19 @@ def complex_detail(conn, version, apt_seq):
                is_cancelled, price_per_m2::float8 AS ppm2
           FROM trades WHERE apt_seq = %s
          ORDER BY deal_date DESC NULLS LAST, id DESC LIMIT 2000""", (apt_seq,)).fetchall()
-    return dict(complex=row, trades=trades)
+    return dict(complex=row, trades=trades, crumbs=region_crumbs(conn, version, row))
+
+
+def region_crumbs(conn, version, c):
+    """단지가 속한 행정구역 경로(시도 → 시군구 → 읍면동). 읍면동이 판정되지 않았으면 신고 시군구까지.
+    → [{"level", "region_cd", "name"}] (단지 검색 화면의 지역 선택 상자 값으로 쓴다)"""
+    umd = c["region_umd_cd"]
+    sgg = umd[:5] if umd else (c["region_sgg_cd"] or c["api_sgg_cd"])
+    chain = [("sido", sgg[:2]), ("sgg", sgg), ("umd", umd)] if sgg else []
+    codes = [code for _, code in chain if code]
+    names = {r["region_cd"]: r["name"] for r in conn.execute(
+        "SELECT region_cd, name FROM regions WHERE boundary_version = %s AND region_cd = ANY(%s)", (version, codes))}
+    return [dict(level=lv, region_cd=code, name=names[code]) for lv, code in chain if code in names]
 
 
 NATION_LIMIT = 3000   # 조건 없는 전국 지도는 최근 거래 순 이만큼만(전체는 4만여 개)
