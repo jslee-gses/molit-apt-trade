@@ -127,12 +127,23 @@ def test_complex_search_and_detail(client, seeded):
 
 
 def test_complex_locations(client, seeded):
-    """단지 화면 지도: 검색어·지역 조건에 맞는 좌표 있는 단지(목록과 같은 조건, 최대 3,000개)."""
+    """단지 화면 지도: 검색 목록과 같은 조건의 좌표 있는 단지 전부(개수 제한 없음), 배열로 작게."""
     r = client.get("/api/complexes/locations?q=청운").get_json()
-    assert [(c["apt_seq"], c["apt_nm"], c["lon"], c["lat"]) for c in r["complexes"]] == [("A", "청운아파트", 126.955, 37.575)]
-    assert {c["apt_seq"] for c in client.get("/api/complexes/locations?region=11110").get_json()["complexes"]} == {"A", "B"}
-    assert client.get("/api/complexes/locations?region=11140").get_json()["complexes"] == []   # C는 좌표 없음
-    assert {c["apt_seq"] for c in client.get("/api/complexes/locations").get_json()["complexes"]} == {"A", "B"}
+    assert r["fields"] == ["apt_seq", "apt_nm", "lon", "lat"]
+    assert r["complexes"] == [["A", "청운아파트", 126.955, 37.575]]
+    seqs = lambda q: {c[0] for c in client.get(f"/api/complexes/locations{q}").get_json()["complexes"]}
+    assert seqs("?region=11110") == {"A", "B"}
+    assert seqs("?region=11140") == set()                     # C는 좌표 없음
+    assert seqs("") == {"A", "B"}
+
+
+def test_complex_locations_nation_limited_to_recent(client, seeded, monkeypatch):
+    """조건 없는 전국 보기는 최근 거래 순 NATION_LIMIT개만, 지역·단지명 조건이 있으면 모두."""
+    monkeypatch.setattr(queries, "NATION_LIMIT", 1)
+    assert len(client.get("/api/complexes/locations").get_json()["complexes"]) == 1
+    assert len(client.get("/api/complexes/locations?region=11").get_json()["complexes"]) == 2
+    resp = client.get("/api/complexes/locations")
+    assert "max-age=600" in resp.headers["Cache-Control"]
     assert client.get("/api/complexes/locations?region=1").status_code == 400
 
 
