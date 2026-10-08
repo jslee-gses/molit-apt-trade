@@ -193,6 +193,7 @@ a.rank-item { grid-template-columns:48px minmax(0,1fr) auto; }
 .leaflet-control-attribution { background:var(--card) !important; color:var(--muted); font-size:11px; }
 .leaflet-control-attribution a { color:var(--muted); font-weight:400; }
 .tiles-dark { filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9); }
+.tiles-gray { filter:grayscale(1); }
 
 /* 칩(추이 지역) */
 .chips { display:flex; flex-wrap:wrap; gap:8px; }
