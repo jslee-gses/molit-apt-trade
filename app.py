@@ -48,6 +48,10 @@ def create_app():
         SEND_FILE_MAX_AGE_DEFAULT=STATIC_MAX_AGE,
     )
 
+    @flask_app.context_processor
+    def asset_version():
+        return {"asset_version": ASSET_VERSION}
+
     @flask_app.url_defaults
     def static_version(endpoint, values):
         if endpoint == "static" and "v" not in values:

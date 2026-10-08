@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% import "_ui.html" as ui %}
-{% block title %}지도 · 아파트 실거래가{% endblock %}
-{% block page_head %}{{ ui.page_head('지역 지도', '시도에서 읍면동까지 단계구분도로 보고, 지역 순위와 지표를 한 화면에서 비교합니다.') }}{% endblock %}
+{% block title %}행정구역 · 아파트 실거래가{% endblock %}
+{% block page_head %}{{ ui.page_head('행정구역', '시도에서 읍면동까지 행정구역별 지표를 단계구분도로 보고, 지역 순위와 함께 비교합니다.') }}{% endblock %}
 {% block body %}
 {% set metrics = [('median_price', '중위 거래가'), ('median_ppm2', '㎡당 중위가'), ('n_trades', '거래량'),
                   ('yoy_price', '중위가 전년 대비'), ('yoy_n', '거래량 전년 대비')] %}

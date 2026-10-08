@@ -45,7 +45,7 @@
       if (!nb.umd_cd || !nb.complexes.length) {
         el('loc').outerHTML = '<p class="meta">읍면동이 판정되지 않아 위치 지도를 그리지 않습니다.</p>';
       } else {
-        const resp = await fetch(`/static/geo/${encodeURIComponent(nb.version)}/umd_${nb.umd_cd.slice(0, 2)}.json`);
+        const resp = await fetch(App.geoUrl(nb.version, `umd_${nb.umd_cd.slice(0, 5)}`));
         if (!resp.ok) throw new Error('경계 파일을 불러오지 못했습니다.');
         const fc = await resp.json();
         const feature = fc.features.filter((f) => f.properties.region_cd === nb.umd_cd);

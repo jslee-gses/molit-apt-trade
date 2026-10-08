@@ -46,6 +46,8 @@ def test_trends_page(client, seeded):
 def test_map_page(client, seeded):
     html = client.get("/map").get_data(as_text=True)
     assert 'id="map"' in html and 'id="ranking"' in html and "js/map.js" in html
+    assert '>행정구역</a>' in html and "<h1>행정구역</h1>" in html
+    assert '<meta name="asset-version" content="' in html     # 경계 파일 주소의 배포 버전(common.js App.geoUrl)
     assert '<header class="page-head">' in html
     assert 'id="compare"' in html and 'class="data-table"' in html and 'id="rank-q"' in html
     assert 'data-value="yoy_n" aria-pressed="false"' in html and 'data-value="median_price" aria-pressed="true"' in html

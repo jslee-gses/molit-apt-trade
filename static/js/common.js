@@ -126,5 +126,9 @@ const App = (() => {
     el.textContent = text || '';
   }
 
-  return { css, api, fmt, shiftYm, monthRange, toMonthInput, fromMonthInput, readState, writeState, seriesColor, chart, baseOption, provisionalArea, escapeHtml, message, pills, barCell, divBarCell };
+  // 경계 파일 주소. 정적 파일은 1년 캐시라 배포 버전(?v=)을 붙여 경계를 다시 만들면 새 파일을 받게 한다
+  const assetV = document.querySelector('meta[name="asset-version"]')?.content || '';
+  const geoUrl = (version, file) => `/static/geo/${encodeURIComponent(version)}/${file}.json${assetV ? `?v=${encodeURIComponent(assetV)}` : ''}`;
+
+  return { geoUrl, css, api, fmt, shiftYm, monthRange, toMonthInput, fromMonthInput, readState, writeState, seriesColor, chart, baseOption, provisionalArea, escapeHtml, message, pills, barCell, divBarCell };
 })();

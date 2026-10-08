@@ -54,13 +54,16 @@ def test_build_writes_files(tmp_path):
     regions = boundaries.build(emd, codes.load_codes(), "2026-10", "테스트", tmp_path / "static", tmp_path / "data")
 
     web = tmp_path / "static" / "2026-10"
-    sgg = json.loads((web / "sgg.json").read_text(encoding="utf-8"))
-    assert sorted(f["properties"]["region_cd"] for f in sgg["features"]) == ["11110", "11140"]
+    # 전국(시도 단계) = 시군구 경계에 시도 코드, 시도별 시군구, 시군구별 읍면동
+    nation = json.loads((web / "nation.json").read_text(encoding="utf-8"))
+    assert sorted(f["properties"]["region_cd"] for f in nation["features"]) == ["11110", "11140"]
+    assert {f["properties"]["sido_cd"] for f in nation["features"]} == {"11"}
+    sgg = json.loads((web / "sgg_11.json").read_text(encoding="utf-8"))
     assert {f["properties"]["name"] for f in sgg["features"]} == {"종로구", "중구"}
-    sido = json.loads((web / "sido.json").read_text(encoding="utf-8"))
-    assert [f["properties"]["region_cd"] for f in sido["features"]] == ["11"]
-    umd = json.loads((web / "umd_11.json").read_text(encoding="utf-8"))
-    assert len(umd["features"]) == 3
+    assert not (web / "sido.json").exists() and not (web / "sgg.json").exists()
+    assert len(json.loads((web / "umd_11140.json").read_text(encoding="utf-8"))["features"]) == 1
+    umd = json.loads((web / "umd_11110.json").read_text(encoding="utf-8"))
+    assert len(umd["features"]) == 2
     lon, lat = umd["features"][0]["geometry"]["coordinates"][0][0][:2] \
         if umd["features"][0]["geometry"]["type"] == "Polygon" \
         else umd["features"][0]["geometry"]["coordinates"][0][0][0][:2]
@@ -78,20 +81,64 @@ def test_build_writes_files(tmp_path):
     assert len(regions) == 6
 
 
-def test_display_drops_tiny_islands_but_assign_keeps_them(tmp_path):
-    speck = box(X0 + 5000, Y0 + 5000, X0 + 5010, Y0 + 5010)    # 100㎡ 섬
+def _parts(features, code):
+    g = next(f["geometry"] for f in features if f["properties"]["region_cd"] == code)
+    return 1 if g["type"] == "Polygon" else len(g["coordinates"])
+
+
+def test_display_keeps_small_islands(tmp_path):
+    """화면용도 원본처럼 작은 섬을 지우지 않는다(10m×10m 섬)."""
+    speck = box(X0 + 5000, Y0 + 5000, X0 + 5010, Y0 + 5010)
     emd = boundaries.normalize_codes(emd_frame(ROWS), {"11110", "11140"}, {})
     i = emd.index[emd["emd_cd"] == "11110101"][0]
     emd.loc[i, "geometry"] = emd.loc[i, "geometry"].union(speck)
     boundaries.build(emd, codes.load_codes(), "2026-10", "t", tmp_path / "s", tmp_path / "d")
-
-    def parts(features, code):
-        g = next(f["geometry"] for f in features if f["properties"]["region_cd"] == code)
-        return 1 if g["type"] == "Polygon" else len(g["coordinates"])
-    umd = json.loads((tmp_path / "s" / "2026-10" / "umd_11.json").read_text(encoding="utf-8"))["features"]
+    umd = json.loads((tmp_path / "s" / "2026-10" / "umd_11110.json").read_text(encoding="utf-8"))["features"]
     assign = json.loads(gzip.decompress((tmp_path / "d" / "2026-10" / "umd_assign.geojson.gz").read_bytes()))
-    assert parts(umd, "11110101") == 1
-    assert parts(assign["features"], "11110101") == 2
+    assert _parts(umd, "11110101") == 2
+    assert _parts(assign["features"], "11110101") == 2
+
+
+def test_display_drops_thin_slivers_only(tmp_path):
+    """원본이 도로를 따라 붙인 폭 1m·길이 300m 띠는 화면용에서 깎고, 판정용은 그대로 둔다."""
+    tail = box(X0 + 1000, Y0 + 500, X0 + 1300, Y0 + 501)
+    emd = boundaries.normalize_codes(emd_frame(ROWS), {"11110", "11140"}, {})
+    i = emd.index[emd["emd_cd"] == "11110101"][0]
+    emd.loc[i, "geometry"] = emd.loc[i, "geometry"].union(tail)
+    boundaries.build(emd, codes.load_codes(), "2026-10", "t", tmp_path / "s", tmp_path / "d")
+    from shapely.geometry import shape
+    umd = json.loads((tmp_path / "s" / "2026-10" / "umd_11110.json").read_text(encoding="utf-8"))["features"]
+    g = gpd.GeoSeries([shape(next(f["geometry"] for f in umd if f["properties"]["region_cd"] == "11110101"))],
+                      crs="EPSG:4326").to_crs("EPSG:5179").iloc[0]
+    assert g.bounds[2] < X0 + 1005                     # 꼬리(동쪽으로 300m)가 없다
+    assert abs(g.area - 1_000_000) < 2_000             # 본체 1km²는 거의 그대로
+    assign = json.loads(gzip.decompress((tmp_path / "d" / "2026-10" / "umd_assign.geojson.gz").read_bytes()))
+    a = gpd.GeoSeries([shape(next(f["geometry"] for f in assign["features"] if f["properties"]["region_cd"] == "11110101"))],
+                      crs="EPSG:4326").to_crs("EPSG:5179").iloc[0]
+    assert a.bounds[2] > X0 + 1200
+
+
+def test_sgg_original_used_unless_area_differs(tmp_path):
+    """시군구는 원본을 쓰되, 읍면동 합과 면적이 다르면(2026 개편 등) 읍면동 합으로 대신한다."""
+    emd = boundaries.normalize_codes(emd_frame(ROWS), {"11110", "11140"}, {})
+    # 종로구 원본: 읍면동 합(3km²)과 같은 면적이지만 모양이 다름(원본 표시 확인용), 중구 원본: 면적이 두 배(개편 전)
+    orig = gpd.GeoDataFrame({"sgg_cd": ["11110", "11140"]}, geometry=[
+        box(X0, Y0 - 100, X0 + 3000, Y0 + 900), box(X0, Y0 - 2000, X0 + 2000, Y0 - 1000)], crs="EPSG:5179")
+    boundaries.build(emd, codes.load_codes(), "2026-10", "t", tmp_path / "s", tmp_path / "d", sgg_original=orig)
+    from shapely.geometry import shape
+    sgg = {f["properties"]["region_cd"]: gpd.GeoSeries([shape(f["geometry"])], crs="EPSG:4326").to_crs("EPSG:5179").iloc[0]
+           for f in json.loads((tmp_path / "s" / "2026-10" / "sgg_11.json").read_text(encoding="utf-8"))["features"]}
+    assert sgg["11110"].bounds[1] < Y0 - 50             # 원본(아래로 100m 내려간 사각형)
+    assert abs(sgg["11140"].area - 1_000_000) < 2_000   # 원본(2km²) 대신 읍면동 합(1km²)
+
+
+def test_load_sgg_reads_bjcd(tmp_path):
+    src = gpd.GeoDataFrame({"BJCD": ["1111000000"], "NAME": ["종로구"]}, geometry=[box(X0, Y0, X0 + 10, Y0 + 10)],
+                           crs="EPSG:5179")
+    path = tmp_path / "sgg.gpkg"
+    src.to_file(path)
+    out = boundaries.load_sgg(path)
+    assert list(out["sgg_cd"]) == ["11110"] and out.crs.to_epsg() == 5179
 
 
 def test_load_emd_reads_file_and_lowercases(tmp_path):
@@ -151,7 +198,7 @@ def test_load_emd_repairs_invalid_and_drops_empty(tmp_path):
 def test_coordinates_rounded_to_five_decimals(tmp_path):
     emd = boundaries.normalize_codes(emd_frame(ROWS), {"11110", "11140"}, {})
     boundaries.build(emd, codes.load_codes(), "2026-10", "t", tmp_path / "s", tmp_path / "d")
-    text = (tmp_path / "s" / "2026-10" / "sgg.json").read_text(encoding="utf-8")
+    text = (tmp_path / "s" / "2026-10" / "nation.json").read_text(encoding="utf-8")
     import re
     nums = re.findall(r"\d+\.(\d+)", text)
     assert nums and max(len(n) for n in nums) <= 5

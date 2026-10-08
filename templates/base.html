@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="asset-version" content="{{ asset_version }}">
   <title>{% block title %}아파트 실거래가{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='fonts/pretendard/pretendard.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
@@ -22,7 +23,7 @@
   <nav aria-label="주 메뉴">
     <a href="/" class="{{ 'on' if request.path == '/' }}"{% if request.path == '/' %} aria-current="page"{% endif %}>대시보드</a>
     <a href="/trends" class="{{ 'on' if request.path == '/trends' }}"{% if request.path == '/trends' %} aria-current="page"{% endif %}>추이</a>
-    <a href="/map" class="{{ 'on' if request.path == '/map' }}"{% if request.path == '/map' %} aria-current="page"{% endif %}>지도</a>
+    <a href="/map" class="{{ 'on' if request.path == '/map' }}"{% if request.path == '/map' %} aria-current="page"{% endif %}>행정구역</a>
     <a href="/complexes" class="{{ 'on' if request.path.startswith('/complexes') }}"{% if request.path.startswith('/complexes') %} aria-current="page"{% endif %}>단지</a>
     <a href="/export" class="{{ 'on' if request.path == '/export' }}"{% if request.path == '/export' %} aria-current="page"{% endif %}>추출</a>
     <a href="/trades" class="{{ 'on' if request.path == '/trades' }}"{% if request.path == '/trades' %} aria-current="page"{% endif %}>거래 목록</a>
@@ -47,7 +48,7 @@
   </div>
   {% endif %}
   {% block body %}{% endblock %}
-  <p class="site-foot">지역 경계: 국토지리정보원 연속수치지형도 행정경계(읍면동), CC BY · 단지 위치: 국토교통부 연속지적도형정보(CC BY) · 글꼴: Pretendard(OFL)</p>
+  <p class="site-foot">지역 경계: 국토지리정보원 연속수치지형도 행정경계(시군구·읍면동), CC BY · 단지 위치: 국토교통부 연속지적도형정보(CC BY) · 글꼴: Pretendard(OFL)</p>
 </main>
 <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
 {% block scripts %}{% endblock %}

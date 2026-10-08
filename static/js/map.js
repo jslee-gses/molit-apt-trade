@@ -55,19 +55,19 @@
   metricPills.value = state.metric;
   bandPills.value = state.band;
 
+  // 경계 파일: 전국(시도 단계) = 시군구 원본 경계를 시도 코드로 칠함, 시도 → 그 시도의 시군구, 시군구 → 그 시군구의 읍면동
   async function geo(version, level, parent) {
-    const file = level === 'sido' ? 'sido' : level === 'sgg' ? 'sgg' : `umd_${parent.slice(0, 2)}`;
-    const url = `/static/geo/${encodeURIComponent(version)}/${file}.json`;
+    const file = level === 'sido' ? 'nation' : level === 'sgg' ? `sgg_${parent}` : `umd_${parent}`;
+    const url = App.geoUrl(version, file);
     if (!geoCache[url]) {
       const resp = await fetch(url);
       if (!resp.ok) throw new Error('경계 파일을 불러오지 못했습니다.');
       geoCache[url] = await resp.json();
     }
-    const fc = geoCache[url];
-    if (level === 'sido') return fc;
-    const key = level === 'sgg' ? 'sido_cd' : 'sgg_cd';
-    return { type: 'FeatureCollection', features: fc.features.filter((f) => f.properties[key] === parent) };
+    return geoCache[url];
   }
+  // 시도 단계는 시군구 경계를 시도 코드로 묶어 칠한다(같은 이름의 경계는 한 지역으로 합쳐 그린다)
+  const nameKey = (level) => (level === 'sido' ? 'sido_cd' : 'region_cd');
 
   function scaleOf(kind, field) {
     const nums = data.values.map((v) => v[field]).filter((v) => v != null);
@@ -171,7 +171,7 @@
         formatter: (p) => (p.componentType === 'geo' ? regionTip(byCd[p.name]) : pointTip(p.data?.c)),
       },
       geo: {
-        map: name, nameProperty: 'region_cd', roam: true, selectedMode: 'single',
+        map: name, nameProperty: nameKey(data.level), roam: true, selectedMode: 'single',
         top: 12, bottom: 12, left: 8, right: 8, tooltip: { show: true },
         regions: data.values.map((v) => {
           const c = colorFor(v[field], kind, sc);
