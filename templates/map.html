@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% import "_ui.html" as ui %}
-{% block title %}지도 · 아파트 실거래가{% endblock %}
-{% block page_head %}{{ ui.page_head('지역 지도', '시도에서 읍면동까지 단계구분도로 보고, 지역 순위와 지표를 한 화면에서 비교합니다.') }}{% endblock %}
+{% block title %}행정구역 · 아파트 실거래가{% endblock %}
+{% block page_head %}{{ ui.page_head('행정구역', '시도에서 읍면동까지 행정구역별 지표를 단계구분도로 보고, 지역 순위와 함께 비교합니다.') }}{% endblock %}
 {% block body %}
 {% set metrics = [('median_price', '중위 거래가'), ('median_ppm2', '㎡당 중위가'), ('n_trades', '거래량'),
                   ('yoy_price', '중위가 전년 대비'), ('yoy_n', '거래량 전년 대비')] %}
@@ -10,8 +10,6 @@
 <section class="card filters">
   <div class="filter-row"><span class="filter-label">지표</span>{{ ui.pills('metric', metrics, 'median_price', '지표', dots) }}</div>
   <div class="filter-row"><span class="filter-label">면적</span>{{ ui.pills('band', bands, 'all', '면적 구간') }}</div>
-  <div class="filter-row"><span class="filter-label">단지</span>{{ ui.pills('pts', [('1', '표시'), ('0', '숨김')], '1', '단지 표시') }}
-    <span class="meta">읍면동 단계에서 단지 위치를 점으로 보여 줍니다(크기 거래량, 색 지표).</span></div>
   <div class="filter-row"><span class="filter-label">기간</span>
     <input type="month" id="from" aria-label="시작월"> ~ <input type="month" id="to" aria-label="종료월">
     <nav id="crumbs" class="crumbs" aria-label="지역 경로"></nav></div>

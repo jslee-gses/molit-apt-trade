@@ -67,6 +67,7 @@ START_YMD = env("START_YMD", "200601")                       # 수집 시작 계
 DAILY_LIMIT = int(env("DAILY_LIMIT", "8000"))                # 하루 호출 상한(개발계정 한도보다 낮게)
 REQUEST_INTERVAL = float(env("REQUEST_INTERVAL", "1.5"))     # 호출 간격(초)
 REFRESH_MONTHS = int(env("REFRESH_MONTHS", "3"))             # 매일 다시 받을 최근 개월 수(신고기한 30일, 해제 반영)
+VWORLD_KEY = env("VWORLD_KEY", "")                           # 브이월드 배경지도(WMTS) 키. 없으면 OpenStreetMap(개발용)
 REFRESH_AT = env("REFRESH_AT", "00:00")                      # 매일 수집을 시작하는 시각(KST, 하루 한도가 자정에 다시 참)
 RECHECK_DAYS = int(env("RECHECK_DAYS", "7"))                 # 최근 1년(재수집 구간 이전) 건수 재확인 주기
 RECHECK_MONTHS = int(env("RECHECK_MONTHS", "12"))            # 주기 재확인할 지난 개월 수

@@ -210,29 +210,16 @@ def complex_detail(conn, version, apt_seq):
     return dict(complex=row, trades=trades)
 
 
-_BAND_SQL = {
-    "all": "TRUE",
-    "le60": "t.exclu_use_ar <= 60",
-    "60_85": "t.exclu_use_ar > 60 AND t.exclu_use_ar <= 85",
-    "gt85": "t.exclu_use_ar > 85",
-}
-
-
-def complex_points(conn, sgg, band, ym_from, ym_to):
-    """시군구 안 좌표 있는 단지와 기간 거래(해제 제외) 건수·중위가·㎡당 중위가. 거래가 없으면 n=0, 값 None."""
-    return conn.execute(f"""
-        SELECT c.apt_seq, c.apt_nm, c.lon, c.lat, COUNT(t.id)::int AS n,
-               percentile_cont(0.5) WITHIN GROUP (ORDER BY t.deal_amount::float8) AS median_price,
-               percentile_cont(0.5) WITHIN GROUP (
-                   ORDER BY CASE WHEN t.exclu_use_ar > 0 THEN t.deal_amount::float8 / t.exclu_use_ar::float8 END)
-                   AS median_ppm2
-          FROM complexes c
-          LEFT JOIN trades t ON t.apt_seq = c.apt_seq AND t.deal_ymd BETWEEN %s AND %s
-               AND NOT t.is_cancelled AND t.deal_amount IS NOT NULL AND ({_BAND_SQL[band]})
-         WHERE c.region_sgg_cd = %s AND c.geocode_status IN ('ok', 'manual')
-           AND c.lon IS NOT NULL AND c.lat IS NOT NULL
-         GROUP BY c.apt_seq, c.apt_nm, c.lon, c.lat
-         ORDER BY c.apt_seq""", (ym_from, ym_to, sgg)).fetchall()
+def complex_locations(conn, q=None, region=None, limit=3000):
+    """단지 화면 지도: 검색 목록과 같은 조건(단지명·지역)의 좌표 있는 단지, 최근 거래 순 최대 limit개."""
+    where, args = _region_filter(region)
+    if q:
+        where += " AND c.apt_nm ILIKE %s"
+        args.append(f"%{q}%")
+    return conn.execute("""
+        SELECT c.apt_seq, c.apt_nm, c.lon, c.lat FROM complexes c
+         WHERE c.geocode_status IN ('ok', 'manual') AND c.lon IS NOT NULL AND c.lat IS NOT NULL""" + where +
+                        " ORDER BY c.last_deal_date DESC NULLS LAST, c.apt_seq LIMIT %s", [*args, limit]).fetchall()
 
 
 def nearby(conn, version, apt_seq, limit=500):

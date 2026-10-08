@@ -53,7 +53,7 @@ def manual_coords(apt_seq):
     return jsonify(ok=True)
 
 
-CACHED = {"api.regions_", "api.agg", "api.map_", "api.map_complexes", "api.summary"}
+CACHED = {"api.regions_", "api.agg", "api.map_", "api.summary"}
 
 
 @bp.errorhandler(BadParam)
@@ -122,19 +122,6 @@ def map_():
                    **{"from": ym_from, "to": ym_to}, **data)
 
 
-@bp.route("/map/complexes")
-def map_complexes():
-    parent = request.args.get("parent") or ""
-    if not (parent.isdigit() and len(parent) == 5):
-        raise BadParam("단지 지도는 시군구 코드(parent, 5자리)가 필요합니다.")
-    band = params.choice(request.args.get("band"), [b for b, _ in params.BANDS], "면적 구간", "all")
-    ym_from, ym_to = _map_period()
-    with db.connection() as conn:
-        version = queries.active_version(conn)
-        rows = queries.complex_points(conn, parent, band, ym_from, ym_to)
-    return jsonify(version=version, parent=parent, band=band, complexes=rows, **{"from": ym_from, "to": ym_to})
-
-
 @bp.route("/summary")
 def summary():
     with db.connection() as conn:
@@ -148,6 +135,13 @@ def complexes_search():
         rows = queries.search_complexes(conn, version, request.args.get("q") or None,
                                         request.args.get("region") or None)
     return jsonify(rows)
+
+
+@bp.route("/complexes/locations")
+def complexes_locations():
+    with db.connection() as conn:
+        rows = queries.complex_locations(conn, request.args.get("q") or None, request.args.get("region") or None)
+    return jsonify(complexes=rows)
 
 
 @bp.route("/complexes/<apt_seq>")

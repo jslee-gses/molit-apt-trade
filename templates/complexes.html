@@ -11,6 +11,12 @@
   </div>
 </form>
 {% if error %}<p class="err">{{ error }}</p>{% endif %}
+<p id="msg" class="meta"></p>
+<section class="card">
+  <h2 class="card-title">단지 위치</h2>
+  <div id="cmap" class="basemap"></div>
+  <p class="table-foot" id="cmap-note"></p>
+</section>
 <div class="table-wrap"><table class="data-table">
   <thead><tr><th scope="col">단지</th><th scope="col">법정동(신고)</th><th scope="col" class="num">건축년도</th><th scope="col">최근 계약일</th></tr></thead>
   <tbody>
@@ -24,3 +30,6 @@
 </table></div>
 <p class="table-foot">{{ rows|length }}개 단지 · 최근 거래 순 최대 50개</p>
 {% endblock %}
+{% block scripts %}{% include "_basemap.html" %}<script src="{{ url_for('static', filename='js/common.js') }}"></script>
+<script>window.SEARCH = {{ {'q': q, 'region': region}|tojson }};</script>
+<script src="{{ url_for('static', filename='js/complexes.js') }}"></script>{% endblock %}

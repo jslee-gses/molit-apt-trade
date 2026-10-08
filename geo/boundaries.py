@@ -1,15 +1,18 @@
-"""[로컬 실행] 읍면동 경계 SHP → 화면용 GeoJSON, 지역 판정용 폴리곤, 지역 목록.
+"""[로컬 실행] 읍면동·시군구 경계 SHP → 화면용 GeoJSON, 지역 판정용 폴리곤, 지역 목록.
 
 사용:
-  python -m geo.boundaries --shp <LT_C_ADEMD_INFO.shp 또는 .zip> --version 2026-10 \
-      [--src-crs EPSG:5186] [--source "브이월드 LT_C_ADEMD_INFO 2026-09"]
+  python -m geo.boundaries --shp <N3A_G0110000.zip> --sgg-shp <N3A_G0100000.zip> --version 2026-10 \
+      [--src-crs EPSG:5186] [--source "국토지리정보원 행정경계 2026-09"]
 
 - 입력: 읍면동 경계. 국토지리정보원 연속수치지형도 행정경계(읍면동) N3A_G0110000(속성 BJCD 10자리·NAME, CC BY)를 쓴다.
   EMD_CD 8자리와 EMD_KOR_NM 또는 EMD_NM을 가진 파일도 읽는다.
 - 경계 코드의 시군구(앞 5자리)가 lawd_codes.csv에 없으면 geo/code_map.csv로 바꾸고, 그래도 없으면 목록을 출력하고 멈춘다.
-- 시군구·시도 폴리곤은 읍면동을 합쳐 만든다(데이터 코드와 지도가 항상 일치).
+- 시군구 화면 경계는 국토지리정보원 행정경계(시군구) N3A_G0100000 원본(CC BY)을 쓴다. 원본에 없거나 읍면동 합과
+  면적이 다른 시군구(2026 개편 등)만 읍면동을 합쳐 대신한다. 시도 원본은 변경금지(CC BY-NC-ND)라 쓰지 않고,
+  전국(시도 단계) 화면은 시군구 경계를 시도 코드로 칠한다. 지역 목록의 시군구·시도와 판정은 읍면동 기준이다.
+- 화면용은 원본을 1m만 단순화하고 작은 섬도 남긴다. 원본이 도로·하천을 따라 붙인 폭 4m 미만의 띠만 깎는다.
 결과:
-  static/geo/{version}/sido.json, sgg.json, umd_{시도코드}.json   화면용(EPSG:4326, 단순화)
+  static/geo/{version}/nation.json, sgg_{시도코드}.json, umd_{시군구코드}.json   화면용(EPSG:4326)
   geo_data/{version}/umd_assign.geojson.gz, regions.csv, meta.json  지역 판정·목록용
 """
 import argparse
@@ -30,9 +33,10 @@ STATIC_GEO = settings.BASE_DIR / "static" / "geo"
 GEO_DATA = settings.BASE_DIR / "geo_data"
 CODE_MAP = settings.BASE_DIR / "geo" / "code_map.csv"
 METRIC_CRS = "EPSG:5179"
-TOLERANCE_M = {"assign": 5, "umd": 30, "sgg": 200, "sido": 500}   # 단순화 허용 오차(m)
-# 화면용에서만 뺄 작은 섬(㎡). 판정용(assign)은 모두 남긴다. 가장 큰 조각은 항상 남긴다.
-MIN_PART_M2 = {"umd": 1e4, "sgg": 1e5, "sido": 5e5}
+# 단순화 허용 오차(m). 화면용은 원본과 눈으로 구분되지 않는 1m만 단순화하고 작은 섬도 지우지 않는다.
+TOLERANCE_M = {"assign": 5, "display": 1}
+SLIVER_M = 2        # 화면용: 폭 2×SLIVER_M(4m) 미만의 가는 띠(원본이 도로·하천을 따라 붙인 꼬리)를 깎아낸다
+AREA_MATCH = 0.005   # 시군구 원본과 (개편 반영) 읍면동 합의 면적 차이가 이보다 크면 원본 대신 읍면동 합을 쓴다
 
 
 class UnknownCodes(Exception):
@@ -113,27 +117,56 @@ def _simplify(gdf, meters):
     return out
 
 
-def _drop_specks(gdf, min_area):
-    """여러 조각 중 min_area(㎡)보다 작은 조각(작은 섬)을 뺀다. 가장 큰 조각은 남긴다."""
-    def keep(g):
-        parts = list(getattr(g, "geoms", [g]))
-        if len(parts) < 2:
-            return g
-        big = [p for p in parts if p.area >= min_area] or [max(parts, key=lambda p: p.area)]
-        return big[0] if len(big) == 1 else shapely.MultiPolygon(big)
+def _drop_slivers(gdf, w=SLIVER_M):
+    """폭 2w 미만의 가는 띠를 깎는다(안쪽으로 w 줄였다 다시 w 늘림, 모서리는 각지게 유지).
+    원본 경계에 도로·하천을 따라 폭 1m 안팎·길이 수백 m의 띠가 붙어 있어 선택 테두리가 꼬리처럼 튀어나온다."""
+    def clean(g):
+        o = g.buffer(-w, join_style="mitre").buffer(w, join_style="mitre")
+        return g if o.is_empty else o
     out = gdf.copy()
-    out["geometry"] = gpd.GeoSeries([keep(g) for g in out.geometry], index=out.index, crs=out.crs)
+    out["geometry"] = gpd.GeoSeries([clean(g) for g in out.geometry], index=out.index, crs=out.crs)
     return out
 
 
-def _display(gdf, level):
-    return _to_web(_simplify(_drop_specks(gdf, MIN_PART_M2[level]), TOLERANCE_M[level]))
+def _display(gdf):
+    # 화면용은 좌표 정밀도 맞춤(set_precision)을 하지 않는다: 1m 단순화에서는 맞닿은 고리가 생겨 위상 오류가 날 수 있고,
+    # 좌표는 쓸 때 소수 5자리(약 1m)로 반올림한다
+    return _to_web(_simplify(_drop_slivers(gdf), TOLERANCE_M["display"]), precise=False)
 
 
-def _to_web(gdf):
+def load_sgg(path, src_crs=None, encoding=None):
+    """국토지리정보원 행정경계(시군구) N3A_G0100000: BJCD 10자리 앞 5자리 = 시군구 코드. → (sgg_cd, geometry) EPSG:5179"""
+    gdf = gpd.read_file(path, encoding=encoding) if encoding else gpd.read_file(path)
+    if gdf.crs is None:
+        gdf = gdf.set_crs(src_crs or METRIC_CRS)
+    cols = {c.lower(): c for c in gdf.columns}
+    code = gdf[cols["bjcd"]].astype(str).str.strip().str[:5]
+    out = gpd.GeoDataFrame({"sgg_cd": code}, geometry=gdf.geometry.make_valid(), crs=gdf.crs).to_crs(METRIC_CRS)
+    return out.dissolve(by="sgg_cd").reset_index()
+
+
+def choose_sgg(dissolved, original):
+    """시군구 경계: 원본(국토지리정보원)이 있고 읍면동 합과 면적이 맞으면 원본, 아니면(2026 개편 등) 읍면동 합.
+    → (GeoDataFrame region_cd·geometry, 읍면동 합으로 대신한 코드 목록)"""
+    orig = original.set_index("sgg_cd").geometry if original is not None else {}
+    rows, fallback = [], []
+    for code, geom in zip(dissolved["region_cd"], dissolved.geometry):
+        o = orig.get(code) if len(orig) else None
+        if o is not None and abs(o.area - geom.area) <= AREA_MATCH * geom.area:
+            rows.append(o)
+        else:
+            rows.append(geom)
+            fallback.append(code)
+    out = dissolved.copy()
+    out["geometry"] = gpd.GeoSeries(rows, index=out.index, crs=dissolved.crs)
+    return out, fallback
+
+
+def _to_web(gdf, precise=True):
     out = gdf.to_crs("EPSG:4326")
-    precise = shapely.set_precision(out.geometry.values, 1e-5)   # 약 1m
-    out["geometry"] = gpd.GeoSeries(precise, index=out.index, crs=out.crs)
+    if precise:
+        snapped = shapely.set_precision(out.geometry.values, 1e-5)   # 약 1m
+        out["geometry"] = gpd.GeoSeries(snapped, index=out.index, crs=out.crs)
     empty = out.geometry.isna() | out.geometry.is_empty
     if empty.any():
         print(f"경고: 단순화 후 비어 버린 경계 {int(empty.sum())}개를 제외했습니다.")
@@ -161,8 +194,9 @@ def _write_geojson(gdf, path, props, gz=False):
         path.write_text(text, encoding="utf-8")
 
 
-def build(emd, codes_df, version, source, static_dir=None, data_dir=None):
-    """emd: normalize_codes를 거친 읍면동(EPSG:5179, 열 emd_cd·name·geometry)."""
+def build(emd, codes_df, version, source, static_dir=None, data_dir=None, sgg_original=None):
+    """emd: normalize_codes를 거친 읍면동(EPSG:5179, 열 emd_cd·name·geometry).
+    sgg_original: load_sgg 결과(없으면 시군구를 읍면동 합으로 만든다)."""
     static_dir = Path(static_dir or STATIC_GEO) / version
     data_dir = Path(data_dir or GEO_DATA) / version
     sgg_names = dict(zip(codes_df["LAWD_CD"], codes_df["시군구"]))
@@ -184,10 +218,16 @@ def build(emd, codes_df, version, source, static_dir=None, data_dir=None):
     sido["name"] = sido["region_cd"].map(sido_names)
     sido["full_name"] = sido["name"]
 
-    _write_geojson(_display(sido, "sido"), static_dir / "sido.json", ["region_cd", "name"])
-    _write_geojson(_display(sgg, "sgg"), static_dir / "sgg.json", ["region_cd", "name", "sido_cd"])
-    for sido_cd, part in umd.groupby("sido_cd"):
-        _write_geojson(_display(part, "umd"), static_dir / f"umd_{sido_cd}.json", ["region_cd", "name", "sgg_cd"])
+    # 화면용: 시도 단계는 시군구 원본 경계를 시도 코드로 칠한다(시도 원본은 변경금지 라이선스라 쓰지 않는다)
+    sgg_web, fallback = choose_sgg(sgg, sgg_original)
+    if sgg_original is not None and fallback:
+        print(f"시군구 원본 대신 읍면동 합을 쓴 곳 {len(fallback)}개(2026 개편 등): {', '.join(fallback)}")
+    sgg_web = _display(sgg_web)
+    _write_geojson(sgg_web, static_dir / "nation.json", ["region_cd", "name", "sido_cd"])
+    for sido_cd, part in sgg_web.groupby("sido_cd"):
+        _write_geojson(part, static_dir / f"sgg_{sido_cd}.json", ["region_cd", "name", "sido_cd"])
+    for sgg_cd, part in umd.groupby("sgg_cd"):
+        _write_geojson(_display(part), static_dir / f"umd_{sgg_cd}.json", ["region_cd", "name", "sgg_cd"])
     _write_geojson(_to_web(_simplify(umd, TOLERANCE_M["assign"])), data_dir / "umd_assign.geojson.gz",
                    ["region_cd", "sgg_cd"], gz=True)
 
@@ -209,7 +249,8 @@ def build(emd, codes_df, version, source, static_dir=None, data_dir=None):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="읍면동 경계 → 화면·판정용 경계 파일")
-    parser.add_argument("--shp", required=True, help="LT_C_ADEMD_INFO .shp(.zip) 경로")
+    parser.add_argument("--shp", required=True, help="읍면동 경계 .shp(.zip) 경로(국토지리정보원 N3A_G0110000)")
+    parser.add_argument("--sgg-shp", help="시군구 경계 .shp(.zip) 경로(국토지리정보원 N3A_G0100000). 없으면 읍면동 합")
     parser.add_argument("--version", required=True, help="경계 버전 YYYY-MM")
     parser.add_argument("--src-crs", help="경계 파일에 .prj가 없을 때 좌표계")
     parser.add_argument("--encoding", help="속성 인코딩(기본: 자동). 한글이 깨지면 cp949 지정")
@@ -228,7 +269,8 @@ def main(argv=None):
         for c in e.codes:
             print(f"  {c}")
         return 1
-    regions = build(emd, codes_df, args.version, args.source or str(args.shp))
+    sgg_original = load_sgg(args.sgg_shp, args.src_crs, args.encoding) if args.sgg_shp else None
+    regions = build(emd, codes_df, args.version, args.source or str(args.shp), sgg_original=sgg_original)
     print(f"경계 {args.version}: " + ", ".join(f"{k} {v}개" for k, v in regions["level"].value_counts().items()))
     for base in (STATIC_GEO, GEO_DATA):
         for f in sorted((base / args.version).glob("*")):

@@ -30,7 +30,7 @@
     xAxis: { ...App.baseOption().xAxis, data: labels },
     yAxis: { ...App.baseOption().yAxis, axisLabel: { color: App.css('--muted'), formatter: App.fmt.int } },
     tooltip: { ...App.baseOption().tooltip, valueFormatter: (v) => `${App.fmt.int(v)}건` },
-    series: [{ name: '거래량', type: 'bar', data: series.map((s) => s.n), itemStyle: { color, borderRadius: [4, 4, 0, 0] }, barMaxWidth: 18, markArea: prov }],
+    series: [{ name: '거래량', type: 'bar', data: series.map((s) => s.n), itemStyle: { color }, barMaxWidth: 18, markArea: prov }],
   });
 
   const price = App.chart(el('price'));
