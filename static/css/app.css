@@ -194,6 +194,8 @@ a.rank-item { grid-template-columns:48px minmax(0,1fr) auto; }
 .leaflet-control-attribution a { color:var(--muted); font-weight:400; }
 .tiles-dark { filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9); }
 .tiles-gray { filter:grayscale(1); }
+/* 지도 위에서는 끝이 정확한 십자 커서, 점 위에서는 손가락(leaflet-interactive), 끄는 동안만 손(leaflet.css) */
+.basemap.leaflet-grab { cursor:crosshair; }
 
 /* 칩(추이 지역) */
 .chips { display:flex; flex-wrap:wrap; gap:8px; }

@@ -52,14 +52,11 @@
         const area = L.geoJSON({ type: 'FeatureCollection', features: fc.features.filter((f) => f.properties.region_cd === nb.umd_cd) }, {
           style: { color: App.css('--ink'), weight: 1.5, fillColor: App.css('--accent'), fillOpacity: 0.06 }, interactive: false,
         }).addTo(map);
-        const dot = (c, self) => L.circleMarker([c.lat, c.lon], self
-          ? { radius: 8, weight: 2, color: App.css('--card'), fillColor: App.css('--series-2'), fillOpacity: 1 }
-          : { radius: 4, weight: 1, color: App.css('--card'), fillColor: App.css('--muted'), fillOpacity: 0.9 })
-          .bindTooltip(App.escapeHtml(c.apt_nm || c.apt_seq), { direction: 'top' });
-        for (const c of nb.complexes.filter((x) => !x.is_self)) {
-          dot(c, false).on('click', () => { location.href = `/complexes/${encodeURIComponent(c.apt_seq)}`; }).addTo(map);
-        }
-        for (const c of nb.complexes.filter((x) => x.is_self)) dot(c, true).addTo(map);
+        const label = (c) => c.apt_nm || c.apt_seq;
+        App.dots(map, nb.complexes.filter((x) => !x.is_self), {
+          fill: App.css('--muted'), label, onClick: (c) => { location.href = `/complexes/${encodeURIComponent(c.apt_seq)}`; },
+        }).addTo(map);
+        App.dots(map, nb.complexes.filter((x) => x.is_self), { fill: App.css('--series-2'), extra: 4, label }).addTo(map);   // 이 단지는 크게
         map.fitBounds(area.getBounds(), { padding: [16, 16] });
       }
     } catch (e) { App.message(el('msg'), e.message); }
