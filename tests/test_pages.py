@@ -53,6 +53,9 @@ def test_map_page(client, seeded):
     assert 'data-value="yoy_n" aria-pressed="false"' in html and 'data-value="median_price" aria-pressed="true"' in html
     assert 'data-value="le60"' in html and "<select" not in html
     assert 'id="pts"' not in html and "단지 표시" not in html      # 단지 위치는 단지 화면에서만
+    # 행정구역 경로는 지도 상자 안(지도 위 왼쪽)
+    card = html.split('class="card map-card">')[1].split("</section>")[0]
+    assert '<nav id="crumbs" class="map-crumbs"' in card and 'id="map"' in card
 
 
 def test_complexes_search_page(client, seeded):
@@ -77,6 +80,18 @@ def test_complexes_region_selects(client, seeded):
     html = client.get("/complexes?sido=11&sgg=11110&umd=11110102").get_data(as_text=True)
     assert "신교빌" in html and "청운아파트" not in html
     assert '"region": "11110102"' in html                       # 지도도 같은 지역
+
+
+def test_complexes_map_crumbs(client, seeded):
+    """단지 지도 왼쪽 위 경로: 전국 › 시도 › 시군구 › 읍면동, 상위 단계는 그 지역을 고른 검색으로."""
+    def crumbs(url):
+        html = client.get(url).get_data(as_text=True)
+        return html.split('class="map-crumbs"')[1].split("</nav>")[0]
+    c = crumbs("/complexes")
+    assert "<b>전국</b>" in c and "<a" not in c
+    c = crumbs("/complexes?sido=11&sgg=11110&umd=11110101")
+    assert 'href="/complexes">전국</a>' in c and 'href="/complexes?sido=11">서울특별시</a>' in c
+    assert 'href="/complexes?sido=11&amp;sgg=11110">종로구</a>' in c and "<b>청운동</b>" in c
 
 
 def test_complexes_mismatched_selects_use_consistent_part(client, seeded):
