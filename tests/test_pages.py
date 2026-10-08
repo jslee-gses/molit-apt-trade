@@ -108,7 +108,8 @@ def test_complexes_bad_region(client, seeded):
 def test_complex_page_breadcrumb_back_to_regions(client, seeded):
     """단지 상세에서 판정된 행정구역 단계로 돌아가는 경로(단지 검색의 지역 선택 상태로)."""
     html = client.get("/complexes/A").get_data(as_text=True)
-    assert 'class="page-crumbs"' in html
+    assert 'class="page-crumbs"' not in html                    # 위치 지도가 있으면 경로는 지도 상자 안
+    assert '<nav class="map-crumbs"' in html.split('<div class="map-wrap">')[1].split('id="loc"')[0]
     assert 'href="/complexes">단지</a>' in html
     assert 'href="/complexes?sido=11">서울특별시</a>' in html
     assert 'href="/complexes?sido=11&amp;sgg=11110">종로구</a>' in html

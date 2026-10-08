@@ -1,9 +1,10 @@
 {% extends "base.html" %}
 {% import "_ui.html" as ui %}
 {% block title %}{{ c.apt_nm }} · 아파트 실거래가{% endblock %}
-{% block page_head %}
-{# 상위 행정구역으로 돌아가기: 단지 검색 화면을 그 지역 선택 상태로 연다 #}
-<nav class="page-crumbs" aria-label="행정구역 경로">
+{% set has_loc = c.lon is not none and c.geocode_status in ('ok', 'manual') %}
+{# 상위 행정구역으로 돌아가기: 단지 검색 화면을 그 지역 선택 상태로 연다. 위치 지도가 있으면 지도 상자 안 왼쪽 위에 #}
+{% macro crumbs_nav(cls) %}
+<nav class="{{ cls }}" aria-label="행정구역 경로">
   <a href="/complexes">단지</a>
   {% set ns = namespace(q=[]) %}
   {% for r in crumbs %}{% set ns.q = ns.q + [r.level ~ '=' ~ r.region_cd] %}
@@ -11,6 +12,9 @@
   {% endfor %}
   <span aria-hidden="true">›</span> <b aria-current="page">{{ c.apt_nm or c.apt_seq }}</b>
 </nav>
+{% endmacro %}
+{% block page_head %}
+{% if not has_loc %}{{ crumbs_nav('page-crumbs') }}{% endif %}
 {{ ui.page_head(c.apt_nm, c.region_name or '지역 미판정') }}{% endblock %}
 {% block body %}
 <div class="toolbar" style="margin-bottom:16px">
@@ -25,8 +29,8 @@
 <p id="msg" class="meta"></p>
 <section class="card">
   <h2 class="card-title">위치</h2>
-  {% if c.lon is not none and c.geocode_status in ('ok', 'manual') %}
-  <div id="loc" class="basemap small"></div>
+  {% if has_loc %}
+  <div class="map-wrap">{{ crumbs_nav('map-crumbs') }}<div id="loc" class="basemap small"></div></div>
   <p class="table-foot">같은 읍면동 단지(회색)와 이 단지(강조). 점을 누르면 그 단지로 갑니다. 단지 위치는 필지 대표점입니다.</p>
   {% else %}
   <p class="meta">위치 정보 없음(좌표 미확보)</p>
