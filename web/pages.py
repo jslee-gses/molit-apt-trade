@@ -87,18 +87,31 @@ def status():
     )
 
 
-@bp.route("/status/no-coords.csv")
-def no_coords_csv():
-    """좌표를 찾지 못한 단지 전부와 주소(엑셀에서 바로 열리게 BOM 붙은 UTF-8)."""
-    with db.connection() as conn:
-        rows = complexes.missing(conn)
+def _csv(rows, columns, filename):
+    """엑셀에서 바로 열리게 BOM 붙은 UTF-8 CSV."""
     out = io.StringIO()
     w = csv.writer(out)
-    w.writerow([label for _, label in complexes.MISSING_COLUMNS])
+    w.writerow([label for _, label in columns])
     for r in rows:
-        w.writerow(["" if r[k] is None else r[k] for k, _ in complexes.MISSING_COLUMNS])
+        w.writerow(["" if r[k] is None else r[k] for k, _ in columns])
     return Response("﻿" + out.getvalue(), mimetype="text/csv",
-                    headers={"Content-Disposition": "attachment; filename=no_coords_complexes.csv"})
+                    headers={"Content-Disposition": f"attachment; filename={filename}"})
+
+
+@bp.route("/status/no-coords.csv")
+def no_coords_csv():
+    """좌표를 찾지 못한 단지 전부와 주소."""
+    with db.connection() as conn:
+        rows = complexes.missing(conn)
+    return _csv(rows, complexes.MISSING_COLUMNS, "no_coords_complexes.csv")
+
+
+@bp.route("/status/unassigned.csv")
+def unassigned_csv():
+    """읍면동 미판정 단지 전부와 원인 추정."""
+    with db.connection() as conn:
+        rows = complexes.unassigned(conn)
+    return _csv(rows, complexes.UNASSIGNED_COLUMNS, "unassigned_complexes.csv")
 
 
 @bp.route("/download.csv")

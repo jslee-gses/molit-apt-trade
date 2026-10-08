@@ -93,3 +93,35 @@ def test_failed_ranks_candidates_by_recent_deal_before_counting(pg):
                      "('NUL', '11110', 'failed', NULL)")
         got = [r["apt_seq"] for r in complexes.failed(conn, limit=2)]
     assert got == ["NEW", "OLD"]
+
+
+def test_summary_counts_near_and_rebuild(pg, seeded):
+    with pg.connection() as conn:
+        conn.execute("""INSERT INTO complexes (apt_seq, api_sgg_cd, geocode_status, geocode_source, lon, lat) VALUES
+            ('N', '11110', 'ok', 'parcel_near', 126.9, 37.5), ('R', '11110', 'ok', 'rebuild', 126.9, 37.5)""")
+        s = complexes.summary(conn)
+    assert (s["parcel"], s["parcel_near"], s["rebuild"], s["located"]) == (1, 1, 1, 3)
+
+
+def test_unassigned_reasons(pg, seeded):
+    with pg.connection() as conn:
+        conn.execute("""INSERT INTO complexes (apt_seq, api_sgg_cd, api_umd_cd, geocode_status, geocode_source, lon, lat,
+                            region_match) VALUES
+            ('W', '11110', NULL, 'ok', 'parcel', 125.0, 34.0, NULL),
+            ('O', '11110', '10100', 'ok', 'parcel', 125.0, 34.0, 'none'),
+            ('X', '11110', '99900', 'failed', NULL, NULL, NULL, 'none')""")
+        rows = {r["apt_seq"]: r for r in complexes.unassigned(conn)}
+    assert set(rows) == {"P", "W", "O", "X"}                     # 경계·코드로 판정된 A·B는 빠짐
+    assert rows["W"]["reason"].startswith("판정 대기") and rows["O"]["reason"].startswith("좌표가 읍면동 경계에서")
+    assert rows["O"]["coords"] == "있음(parcel)" and rows["X"]["coords"] == "없음"
+    assert rows["P"]["reason"] == "좌표 없음 + 신고 법정동 코드 없음" and "대응표" in rows["X"]["reason"]
+
+
+def test_unassigned_csv_and_status_links(client, seeded):
+    resp = client.get("/status/unassigned.csv")
+    assert resp.status_code == 200 and "unassigned_complexes.csv" in resp.headers["Content-Disposition"]
+    text = resp.get_data(as_text=True)
+    assert text.startswith("﻿단지 코드,단지명,원인(추정),좌표") and "다단지" in text and "가단지" not in text
+    html = client.get("/status").get_data(as_text=True)
+    assert "/status/unassigned.csv" in html and "근처 지번" in html and "재건축" in html
+

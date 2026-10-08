@@ -101,6 +101,8 @@ def summary(conn):
         SELECT COUNT(*) AS total,
                COUNT(*) FILTER (WHERE geocode_status IN ('ok', 'manual')) AS located,
                COUNT(*) FILTER (WHERE geocode_status = 'ok' AND geocode_source = 'parcel') AS parcel,
+               COUNT(*) FILTER (WHERE geocode_status = 'ok' AND geocode_source = 'parcel_near') AS parcel_near,
+               COUNT(*) FILTER (WHERE geocode_status = 'ok' AND geocode_source = 'rebuild') AS rebuild,
                COUNT(*) FILTER (WHERE geocode_status = 'manual') AS manual,
                COUNT(*) FILTER (WHERE geocode_status = 'pending') AS pending,
                COUNT(*) FILTER (WHERE geocode_status = 'failed') AS failed,
@@ -149,4 +151,30 @@ def missing(conn):
                AND r.boundary_version = (SELECT version FROM boundary_versions WHERE is_active)
           CROSS JOIN LATERAL (SELECT COUNT(*) AS n FROM trades WHERE apt_seq = c.apt_seq) t
          WHERE c.geocode_status IN ('pending', 'failed')
+         ORDER BY t.n DESC, c.apt_seq""").fetchall()
+
+
+UNASSIGNED_COLUMNS = [("apt_seq", "단지 코드"), ("apt_nm", "단지명"), ("reason", "원인(추정)"), ("coords", "좌표"),
+                      ("sgg_name", "시군구"), ("api_sgg_cd", "신고 시군구 코드"), ("api_umd_cd", "신고 법정동 코드"),
+                      ("api_umd_nm", "법정동"), ("jibun", "지번"), ("n_trades", "거래 수"), ("last_deal_date", "최근 계약일")]
+
+
+def unassigned(conn):
+    """읍면동을 정하지 못한 단지 전부(판정 대기 포함)와 원인 추정. 거래 많은 순."""
+    return conn.execute("""
+        SELECT c.apt_seq, c.apt_nm,
+               CASE WHEN c.region_match IS NULL THEN '판정 대기(다음 지리 처리에서 판정)'
+                    WHEN c.geocode_status IN ('ok', 'manual') AND c.lon IS NOT NULL
+                         THEN '좌표가 읍면동 경계에서 200m 넘게 떨어짐 + 법정동 코드로도 못 정함'
+                    WHEN COALESCE(c.api_umd_cd, '') = '' THEN '좌표 없음 + 신고 법정동 코드 없음'
+                    ELSE '좌표 없음 + 법정동 코드가 현재 경계에 없음(개편 코드 대응표 확인)' END AS reason,
+               CASE WHEN c.geocode_status IN ('ok', 'manual') AND c.lon IS NOT NULL
+                    THEN '있음(' || COALESCE(c.geocode_source, c.geocode_status) || ')' ELSE '없음' END AS coords,
+               COALESCE(r.full_name, c.api_sgg_cd) AS sgg_name, c.api_sgg_cd, c.api_umd_cd, c.api_umd_nm, c.jibun,
+               t.n AS n_trades, c.last_deal_date
+          FROM complexes c
+          LEFT JOIN regions r ON r.region_cd = c.api_sgg_cd AND r.level = 'sgg'
+               AND r.boundary_version = (SELECT version FROM boundary_versions WHERE is_active)
+          CROSS JOIN LATERAL (SELECT COUNT(*) AS n FROM trades WHERE apt_seq = c.apt_seq) t
+         WHERE c.region_match = 'none' OR c.region_match IS NULL
          ORDER BY t.n DESC, c.apt_seq""").fetchall()
