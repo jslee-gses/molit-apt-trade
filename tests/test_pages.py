@@ -52,14 +52,15 @@ def test_map_page(client, seeded):
     assert 'id="compare"' in html and 'class="data-table"' in html and 'id="rank-q"' in html
     assert 'data-value="yoy_n" aria-pressed="false"' in html and 'data-value="median_price" aria-pressed="true"' in html
     assert 'data-value="le60"' in html and "<select" not in html
-    assert 'id="pts" role="group"' in html and 'data-value="1" aria-pressed="true"' in html
-    assert "단지 표시" in html
+    assert 'id="pts"' not in html and "단지 표시" not in html      # 단지 위치는 단지 화면에서만
 
 
 def test_complexes_search_page(client, seeded):
     html = client.get("/complexes?q=청운").get_data(as_text=True)
     assert "청운아파트" in html and 'href="/complexes/A"' in html and "무교타워" not in html
     assert '<header class="page-head">' in html and 'class="data-table"' in html
+    assert 'id="cmap" class="basemap"' in html and "leaflet" in html and "js/complexes.js" in html
+    assert '<meta name="vworld-key"' in html
 
 
 def test_complexes_bad_region(client, seeded):

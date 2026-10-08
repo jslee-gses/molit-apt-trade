@@ -130,5 +130,22 @@ const App = (() => {
   const assetV = document.querySelector('meta[name="asset-version"]')?.content || '';
   const geoUrl = (version, file) => `/static/geo/${encodeURIComponent(version)}/${file}.json${assetV ? `?v=${encodeURIComponent(assetV)}` : ''}`;
 
-  return { geoUrl, css, api, fmt, shiftYm, monthRange, toMonthInput, fromMonthInput, readState, writeState, seriesColor, chart, baseOption, provisionalArea, escapeHtml, message, pills, barCell, divBarCell };
+  // 배경지도 타일: 브이월드(밝게 흰 지도, 어둡게 야간 지도). 키가 없으면 OpenStreetMap(어둡게는 색 반전).
+  function basemap(map) {
+    const key = document.querySelector('meta[name="vworld-key"]')?.content;
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    if (key) {
+      L.tileLayer(`https://api.vworld.kr/req/wmts/1.0.0/${encodeURIComponent(key)}/${dark ? 'midnight' : 'white'}/{z}/{y}/{x}.png`, {
+        minZoom: 6, maxZoom: 19, attribution: '배경지도 <a href="https://www.vworld.kr" target="_blank" rel="noopener">브이월드(국토교통부)</a>',
+      }).addTo(map);
+    } else {
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19, className: dark ? 'tiles-dark' : '',
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+      }).addTo(map);
+    }
+    return map;
+  }
+
+  return { basemap, geoUrl, css, api, fmt, shiftYm, monthRange, toMonthInput, fromMonthInput, readState, writeState, seriesColor, chart, baseOption, provisionalArea, escapeHtml, message, pills, barCell, divBarCell };
 })();

@@ -126,25 +126,14 @@ def test_complex_search_and_detail(client, seeded):
     assert client.get("/api/complexes?region=1").status_code == 400
 
 
-def test_map_complexes(client, seeded):
-    r = client.get("/api/map/complexes?parent=11110&from=202607&to=202609").get_json()
-    assert r["parent"] == "11110" and r["from"] == "202607" and r["to"] == "202609"
-    by = {c["apt_seq"]: c for c in r["complexes"]}
-    assert set(by) == {"A", "B"}
-    assert by["A"]["n"] == 9 and by["A"]["lon"] == 126.955 and by["A"]["apt_nm"] == "청운아파트"
-    assert by["B"]["n"] == 6 and by["B"]["median_price"] is not None and by["B"]["median_ppm2"] is not None
-
-
-def test_map_complexes_band_and_empty(client, seeded):
-    r = client.get("/api/map/complexes?parent=11110&band=le60&from=202607&to=202609").get_json()
-    by = {c["apt_seq"]: c for c in r["complexes"]}
-    assert by["A"]["n"] == 9 and by["B"]["n"] == 0 and by["B"]["median_price"] is None   # B는 114.8㎡
-    assert client.get("/api/map/complexes?parent=11140").get_json()["complexes"] == []   # 좌표 있는 단지 없음
-
-
-@pytest.mark.parametrize("q", ["", "parent=111", "parent=abcde", "parent=11110&band=x"])
-def test_map_complexes_rejects(client, seeded, q):
-    assert client.get(f"/api/map/complexes?{q}").status_code == 400
+def test_complex_locations(client, seeded):
+    """단지 화면 지도: 검색어·지역 조건에 맞는 좌표 있는 단지(목록과 같은 조건, 최대 3,000개)."""
+    r = client.get("/api/complexes/locations?q=청운").get_json()
+    assert [(c["apt_seq"], c["apt_nm"], c["lon"], c["lat"]) for c in r["complexes"]] == [("A", "청운아파트", 126.955, 37.575)]
+    assert {c["apt_seq"] for c in client.get("/api/complexes/locations?region=11110").get_json()["complexes"]} == {"A", "B"}
+    assert client.get("/api/complexes/locations?region=11140").get_json()["complexes"] == []   # C는 좌표 없음
+    assert {c["apt_seq"] for c in client.get("/api/complexes/locations").get_json()["complexes"]} == {"A", "B"}
+    assert client.get("/api/complexes/locations?region=1").status_code == 400
 
 
 def test_nearby(client, seeded):

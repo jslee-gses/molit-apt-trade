@@ -181,6 +181,19 @@ a.rank-item { grid-template-columns:48px minmax(0,1fr) auto; }
 .side { border:1px solid var(--line); padding:10px 12px; }
 .side-head { display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; align-items:center; color:var(--ink); font-size:14px; }
 
+/* 배경지도(Leaflet): 직각, 화면 색 토큰 */
+.basemap { height:520px; border:1px solid var(--line); background:var(--soft); }
+.basemap.small { height:340px; }
+.leaflet-container { font-family:var(--font); }
+.leaflet-bar, .leaflet-bar a, .leaflet-bar a:first-child, .leaflet-bar a:last-child, .leaflet-tooltip { border-radius:0; }
+.leaflet-bar { border:1px solid var(--line) !important; box-shadow:none !important; }
+.leaflet-bar a { background:var(--card); color:var(--ink); border-bottom:1px solid var(--line); }
+.leaflet-tooltip { background:var(--card); color:var(--text); border:1px solid var(--line); box-shadow:none; }
+.leaflet-tooltip-top:before { border-top-color:var(--line); }
+.leaflet-control-attribution { background:var(--card) !important; color:var(--muted); font-size:11px; }
+.leaflet-control-attribution a { color:var(--muted); font-weight:400; }
+.tiles-dark { filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9); }
+
 /* 칩(추이 지역) */
 .chips { display:flex; flex-wrap:wrap; gap:8px; }
 .chip { display:inline-flex; gap:6px; align-items:center; height:34px; padding:0 4px 0 10px; border:1px solid var(--line);

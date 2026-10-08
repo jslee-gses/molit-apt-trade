@@ -38,36 +38,29 @@
   const FLOORS = [['지하', (f) => f < 1], ['1~5', (f) => f >= 1 && f <= 5], ['6~10', (f) => f >= 6 && f <= 10], ['11~15', (f) => f >= 11 && f <= 15], ['16~20', (f) => f >= 16 && f <= 20], ['21+', (f) => f >= 21]];
   bar(el('floors'), FLOORS.map((f) => f[0]), FLOORS.map(([, test]) => trades.filter((t) => t.floor != null && test(t.floor)).length), '건');
 
-  // 위치: 같은 읍면동 경계 위에 주변 단지(회색)와 이 단지(강조)
+  // 위치: 배경지도 위에 그 읍면동 경계, 주변 단지(회색)와 이 단지(강조)
   if (el('loc')) {
     try {
       const nb = await App.api(`/api/complexes/${encodeURIComponent(window.APT_SEQ)}/nearby`);
+      const map = App.basemap(L.map(el('loc'), { preferCanvas: true }).setView([36.4, 127.9], 7));
       if (!nb.umd_cd || !nb.complexes.length) {
-        el('loc').outerHTML = '<p class="meta">읍면동이 판정되지 않아 위치 지도를 그리지 않습니다.</p>';
+        App.message(el('msg'), '읍면동이 판정되지 않아 위치 지도에 경계를 그리지 않습니다.', 'meta');
       } else {
         const resp = await fetch(App.geoUrl(nb.version, `umd_${nb.umd_cd.slice(0, 5)}`));
         if (!resp.ok) throw new Error('경계 파일을 불러오지 못했습니다.');
         const fc = await resp.json();
-        const feature = fc.features.filter((f) => f.properties.region_cd === nb.umd_cd);
-        const mapName = `loc:${nb.version}:${nb.umd_cd}`;
-        echarts.registerMap(mapName, { type: 'FeatureCollection', features: feature });
-        const others = nb.complexes.filter((c) => !c.is_self);
-        const self = nb.complexes.filter((c) => c.is_self);
-        const pt = (c) => ({ value: [c.lon, c.lat], c });
-        const loc = App.chart(el('loc'));
-        loc.setOption({
-          tooltip: { trigger: 'item', backgroundColor: App.css('--card'), borderColor: App.css('--line'), textStyle: { color: App.css('--text') },
-            formatter: (p) => (p.data?.c ? App.escapeHtml(p.data.c.apt_nm || p.data.c.apt_seq) : App.escapeHtml(nb.umd_name || '')) },
-          geo: { map: mapName, roam: true, top: 8, bottom: 8, left: 8, right: 8, silent: true,
-            itemStyle: { areaColor: App.css('--soft'), borderColor: App.css('--line'), borderWidth: 1 } },
-          series: [
-            { type: 'scatter', coordinateSystem: 'geo', data: others.map(pt), symbolSize: 7,
-              itemStyle: { color: App.css('--muted'), borderColor: App.css('--card'), borderWidth: 1 } },
-            { type: 'scatter', coordinateSystem: 'geo', data: self.map(pt), symbolSize: 16, z: 3,
-              itemStyle: { color: App.css('--accent'), borderColor: App.css('--card'), borderWidth: 2 } },
-          ],
-        });
-        loc.on('click', (p) => { const c = p.data?.c; if (c && !c.is_self) location.href = `/complexes/${encodeURIComponent(c.apt_seq)}`; });
+        const area = L.geoJSON({ type: 'FeatureCollection', features: fc.features.filter((f) => f.properties.region_cd === nb.umd_cd) }, {
+          style: { color: App.css('--ink'), weight: 1.5, fillColor: App.css('--accent'), fillOpacity: 0.06 }, interactive: false,
+        }).addTo(map);
+        const dot = (c, self) => L.circleMarker([c.lat, c.lon], self
+          ? { radius: 8, weight: 2, color: App.css('--card'), fillColor: App.css('--series-2'), fillOpacity: 1 }
+          : { radius: 4, weight: 1, color: App.css('--card'), fillColor: App.css('--muted'), fillOpacity: 0.9 })
+          .bindTooltip(App.escapeHtml(c.apt_nm || c.apt_seq), { direction: 'top' });
+        for (const c of nb.complexes.filter((x) => !x.is_self)) {
+          dot(c, false).on('click', () => { location.href = `/complexes/${encodeURIComponent(c.apt_seq)}`; }).addTo(map);
+        }
+        for (const c of nb.complexes.filter((x) => x.is_self)) dot(c, true).addTo(map);
+        map.fitBounds(area.getBounds(), { padding: [16, 16] });
       }
     } catch (e) { App.message(el('msg'), e.message); }
   }

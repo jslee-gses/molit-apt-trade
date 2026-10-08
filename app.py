@@ -50,7 +50,7 @@ def create_app():
 
     @flask_app.context_processor
     def asset_version():
-        return {"asset_version": ASSET_VERSION}
+        return {"asset_version": ASSET_VERSION, "vworld_key": settings.VWORLD_KEY}
 
     @flask_app.url_defaults
     def static_version(endpoint, values):

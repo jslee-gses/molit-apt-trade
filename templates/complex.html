@@ -16,7 +16,7 @@
 <section class="card">
   <h2 class="card-title">위치</h2>
   {% if c.lon is not none and c.geocode_status in ('ok', 'manual') %}
-  <div id="loc" class="chart small"></div>
+  <div id="loc" class="basemap small"></div>
   <p class="table-foot">같은 읍면동 단지(회색)와 이 단지(강조). 점을 누르면 그 단지로 갑니다. 단지 위치는 필지 대표점입니다.</p>
   {% else %}
   <p class="meta">위치 정보 없음(좌표 미확보)</p>
@@ -42,5 +42,5 @@
   <p class="table-foot">해제 거래는 취소선으로 표시합니다.</p>
 </section>
 {% endblock %}
-{% block scripts %}{% include "_charts.html" %}<script>window.APT_SEQ = {{ c.apt_seq|tojson }};</script>
+{% block scripts %}{% include "_basemap.html" %}{% include "_charts.html" %}<script>window.APT_SEQ = {{ c.apt_seq|tojson }};</script>
 <script src="{{ url_for('static', filename='js/complex.js') }}"></script>{% endblock %}

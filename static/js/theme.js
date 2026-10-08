@@ -24,7 +24,7 @@
     const theme = pref === 'dark' || (pref === 'system' && media.matches) ? 'dark' : 'light';
     const changed = root.getAttribute('data-theme') !== theme;
     root.setAttribute('data-theme', theme);
-    if (changed && window.echarts) location.reload();
+    if (changed && (window.echarts || window.L)) location.reload();   // 차트 색·배경지도 타일을 다시 정한다
   }
 
   let pref = read();
