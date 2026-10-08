@@ -3,7 +3,8 @@
 (async () => {
   const el = (id) => document.getElementById(id);
   // 시작 위치를 정하지 않고 단지 위치를 받은 뒤 한 번에 맞춘다(전국을 먼저 그렸다가 확대하는 깜빡임 방지)
-  const map = App.basemap(L.map(el('cmap'), { preferCanvas: true }));
+  const map = App.basemap(L.map(el('cmap'), { preferCanvas: true, zoomControl: false }));
+  L.control.zoom({ position: 'topright' }).addTo(map);   // 왼쪽 위는 행정구역 경로 상자 자리
   const nationView = () => map.setView([36.4, 127.9], 7, { animate: false });
   try {
     const data = await App.api('/api/complexes/locations', window.SEARCH || {});

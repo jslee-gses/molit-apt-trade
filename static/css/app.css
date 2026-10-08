@@ -173,6 +173,9 @@ a.rank-item { grid-template-columns:48px minmax(0,1fr) auto; }
   font-size:16px; color:var(--muted); }
 .map-crumbs a { font-weight:600; }
 .map-crumbs b { color:var(--ink); font-weight:800; }
+/* 단지 지도(Leaflet): 지도 바로 위에 겹치고, 오른쪽 위 확대·축소 버튼 자리는 비운다 */
+.map-wrap { position:relative; }
+.map-wrap .map-crumbs { top:12px; left:12px; z-index:1000; max-width:calc(100% - 80px); }
 .rank-card { display:flex; flex-direction:column; gap:12px; max-height:584px; }
 .rank-card > input { flex:0 0 auto; }
 .rank-card .rank-list { overflow-y:auto; min-height:0; flex:1 1 auto; }

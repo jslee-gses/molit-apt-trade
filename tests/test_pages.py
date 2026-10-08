@@ -82,6 +82,18 @@ def test_complexes_region_selects(client, seeded):
     assert '"region": "11110102"' in html                       # 지도도 같은 지역
 
 
+def test_complexes_map_crumbs(client, seeded):
+    """단지 지도 왼쪽 위 경로: 전국 › 시도 › 시군구 › 읍면동, 상위 단계는 그 지역을 고른 검색으로."""
+    def crumbs(url):
+        html = client.get(url).get_data(as_text=True)
+        return html.split('class="map-crumbs"')[1].split("</nav>")[0]
+    c = crumbs("/complexes")
+    assert "<b>전국</b>" in c and "<a" not in c
+    c = crumbs("/complexes?sido=11&sgg=11110&umd=11110101")
+    assert 'href="/complexes">전국</a>' in c and 'href="/complexes?sido=11">서울특별시</a>' in c
+    assert 'href="/complexes?sido=11&amp;sgg=11110">종로구</a>' in c and "<b>청운동</b>" in c
+
+
 def test_complexes_mismatched_selects_use_consistent_part(client, seeded):
     """상위를 바꿨는데 하위 값이 남은 주소(예: sido=26&sgg=11110)는 상위에 속하지 않는 하위를 버린다."""
     html = client.get("/complexes?sido=26&sgg=11110&umd=11110101").get_data(as_text=True)

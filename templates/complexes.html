@@ -35,9 +35,23 @@
 </script>
 {% if error %}<p class="err">{{ error }}</p>{% endif %}
 <p id="msg" class="meta"></p>
+{% set names = {} %}
+{% for lv in ('sido', 'sgg', 'umd') %}{% for r in opts[lv] if r.region_cd == sel[lv] %}{% set _ = names.update({lv: r.name}) %}{% endfor %}{% endfor %}
+{% set steps = [('전국', '/complexes')] %}
+{% if names.sido %}{% set _ = steps.append((names.sido, '/complexes?sido=' ~ sel.sido)) %}{% endif %}
+{% if names.sgg %}{% set _ = steps.append((names.sgg, '/complexes?sido=' ~ sel.sido ~ '&sgg=' ~ sel.sgg)) %}{% endif %}
+{% if names.umd %}{% set _ = steps.append((names.umd, '')) %}{% endif %}
 <section class="card">
   <h2 class="card-title">단지 위치</h2>
-  <div id="cmap" class="basemap"></div>
+  <div class="map-wrap">
+    <nav class="map-crumbs" aria-label="행정구역 경로">
+      {%- for name, href in steps -%}
+        {% if not loop.first %}<span aria-hidden="true">›</span>{% endif %}
+        {% if loop.last %}<b>{{ name }}</b>{% else %}<a href="{{ href }}">{{ name }}</a>{% endif %}
+      {%- endfor -%}
+    </nav>
+    <div id="cmap" class="basemap"></div>
+  </div>
   <p class="table-foot" id="cmap-note"></p>
 </section>
 <div class="table-wrap"><table class="data-table">
