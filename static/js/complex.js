@@ -42,7 +42,8 @@
   if (el('loc')) {
     try {
       const nb = await App.api(`/api/complexes/${encodeURIComponent(window.APT_SEQ)}/nearby`);
-      const map = App.basemap(L.map(el('loc'), { preferCanvas: true }).setView([36.4, 127.9], 7));
+      const map = App.basemap(L.map(el('loc'), { preferCanvas: true, zoomControl: false }).setView([36.4, 127.9], 7));
+      L.control.zoom({ position: 'topright' }).addTo(map);   // 왼쪽 위는 행정구역 경로 상자 자리
       if (!nb.umd_cd || !nb.complexes.length) {
         App.message(el('msg'), '읍면동이 판정되지 않아 위치 지도에 경계를 그리지 않습니다.', 'meta');
       } else {
