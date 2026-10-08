@@ -54,8 +54,8 @@ def test_map_page(client, seeded):
     assert 'data-value="le60"' in html and "<select" not in html
     assert 'id="pts"' not in html and "단지 표시" not in html      # 단지 위치는 단지 화면에서만
     # 행정구역 경로는 지도 상자 안(지도 위 왼쪽)
-    assert 'class="card map-card">
-    <nav id="crumbs" class="map-crumbs"' in html
+    card = html.split('class="card map-card">')[1].split("</section>")[0]
+    assert '<nav id="crumbs" class="map-crumbs"' in card and 'id="map"' in card
 
 
 def test_complexes_search_page(client, seeded):
