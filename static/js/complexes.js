@@ -7,16 +7,11 @@
   const nationView = () => map.setView([36.4, 127.9], 7, { animate: false });
   try {
     const data = await App.api('/api/complexes/locations', window.SEARCH || {});
-    const style = { radius: 3.5, weight: 0.8, color: App.css('--card'), fillColor: App.css('--accent'), fillOpacity: 0.9 };   // 4만여 개라 한 번만 읽는다
-    const layer = L.featureGroup();
-    for (const [apt_seq, apt_nm, lon, lat] of data.complexes) {
-      const c = { apt_seq, apt_nm, lon, lat };
-      L.circleMarker([c.lat, c.lon], style)
-        .bindTooltip(App.escapeHtml(c.apt_nm || c.apt_seq), { direction: 'top' })
-        .on('click', () => { location.href = `/complexes/${encodeURIComponent(c.apt_seq)}`; })
-        .addTo(layer);
-    }
-    layer.addTo(map);
+    const items = data.complexes.map(([apt_seq, apt_nm, lon, lat]) => ({ apt_seq, apt_nm, lon, lat }));
+    const layer = App.dots(map, items, {
+      fill: App.css('--accent'), label: (c) => c.apt_nm || c.apt_seq,
+      onClick: (c) => { location.href = `/complexes/${encodeURIComponent(c.apt_seq)}`; },
+    }).addTo(map);
     if (data.complexes.length) map.fitBounds(layer.getBounds(), { padding: [24, 24], maxZoom: 16, animate: false });
     else nationView();
     const s = window.SEARCH || {};

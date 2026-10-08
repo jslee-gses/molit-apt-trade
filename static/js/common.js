@@ -148,5 +148,28 @@ const App = (() => {
     return map;
   }
 
-  return { basemap, geoUrl, css, api, fmt, shiftYm, monthRange, toMonthInput, fromMonthInput, readState, writeState, seriesColor, chart, baseOption, provisionalArea, escapeHtml, message, pills, barCell, divBarCell };
+  // 단지 점: 캔버스로 그리고, 점 주변 DOT_TOLERANCE px 안에서도 반응(작은 점도 고르기 쉽게),
+  // 확대 수준에 따라 크기를 바꾸고, 마우스를 올린 점은 키우고 굵은 테두리로 강조한다.
+  // items: [{lat, lon, ...}], fill: 채움색, extra: 기본 크기에 더할 px(강조할 단지), label(it): 도움말, onClick(it)
+  const DOT_TOLERANCE = 8;
+  const dotRadius = (z) => (z == null ? 3.5 : z <= 8 ? 2.5 : z <= 11 ? 3.5 : z <= 13 ? 4.5 : z <= 15 ? 6 : 7);
+  function dots(map, items, { fill, extra = 0, label, onClick } = {}) {
+    if (!map._dotRenderer) map._dotRenderer = L.canvas({ tolerance: DOT_TOLERANCE });
+    const card = css('--card'), ink = css('--ink');
+    const radius = () => dotRadius(map._loaded ? map.getZoom() : null) + extra;
+    const group = L.featureGroup();
+    for (const it of items) {
+      const m = L.circleMarker([it.lat, it.lon], { renderer: map._dotRenderer, radius: radius(), weight: 0.8, color: card, fillColor: fill, fillOpacity: 0.9 });
+      if (label) m.bindTooltip(escapeHtml(label(it)), { direction: 'top', offset: [0, -4] });
+      m.on('mouseover', () => { m.setStyle({ weight: 2, color: ink }); m.setRadius(radius() + 3); m.bringToFront(); });
+      m.on('mouseout', () => { m.setStyle({ weight: 0.8, color: card }); m.setRadius(radius()); });
+      if (onClick) m.on('click', () => onClick(it));
+      m.addTo(group);
+    }
+    const resize = () => { const r = radius(); group.eachLayer((m) => m.setRadius(r)); };
+    map.on('zoomend load', resize);
+    return group;
+  }
+
+  return { dots, basemap, geoUrl, css, api, fmt, shiftYm, monthRange, toMonthInput, fromMonthInput, readState, writeState, seriesColor, chart, baseOption, provisionalArea, escapeHtml, message, pills, barCell, divBarCell };
 })();
