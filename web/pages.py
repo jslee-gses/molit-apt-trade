@@ -1,7 +1,9 @@
 """화면: 거래 목록, 수집 현황."""
+import csv
+import io
 from urllib.parse import urlencode
 
-from flask import Blueprint, abort, redirect, render_template, request, url_for
+from flask import Blueprint, Response, abort, redirect, render_template, request, url_for
 
 import db
 import settings
@@ -83,6 +85,20 @@ def status():
         recheck_days=settings.RECHECK_DAYS, old_recheck_days=settings.OLD_RECHECK_DAYS,
         interval=settings.REQUEST_INTERVAL,
     )
+
+
+@bp.route("/status/no-coords.csv")
+def no_coords_csv():
+    """좌표를 찾지 못한 단지 전부와 주소(엑셀에서 바로 열리게 BOM 붙은 UTF-8)."""
+    with db.connection() as conn:
+        rows = complexes.missing(conn)
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow([label for _, label in complexes.MISSING_COLUMNS])
+    for r in rows:
+        w.writerow(["" if r[k] is None else r[k] for k, _ in complexes.MISSING_COLUMNS])
+    return Response("﻿" + out.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=no_coords_complexes.csv"})
 
 
 @bp.route("/download.csv")

@@ -128,3 +128,25 @@ def failed(conn, limit=100):
                  ORDER BY last_deal_date DESC NULLS LAST, apt_seq LIMIT %s) c
           CROSS JOIN LATERAL (SELECT COUNT(*) AS n FROM trades WHERE apt_seq = c.apt_seq) t
          ORDER BY t.n DESC, c.apt_seq""", (limit,)).fetchall()
+
+
+MISSING_COLUMNS = [("apt_seq", "단지 코드"), ("apt_nm", "단지명"), ("status", "상태"), ("sgg_name", "시군구"),
+                   ("api_umd_nm", "법정동"), ("jibun", "지번"), ("address", "지번 주소"), ("road_nm", "도로명"),
+                   ("build_year", "건축년도"), ("n_trades", "거래 수"), ("last_deal_date", "최근 계약일")]
+
+
+def missing(conn):
+    """좌표가 없는 단지 전부(못 찾음·대기). 시군구 이름은 사용 중 경계 판의 지역 이름(없으면 코드).
+    거래 많은 순으로, 지번 주소는 시군구 + 법정동 + 지번."""
+    return conn.execute("""
+        SELECT c.apt_seq, c.apt_nm,
+               CASE c.geocode_status WHEN 'failed' THEN '못 찾음' ELSE '대기(좌표 도구 실행 전)' END AS status,
+               COALESCE(r.full_name, c.api_sgg_cd) AS sgg_name, c.api_umd_nm, c.jibun,
+               concat_ws(' ', COALESCE(r.full_name, c.api_sgg_cd), c.api_umd_nm, NULLIF(c.jibun, '')) AS address,
+               c.road_nm, c.build_year, t.n AS n_trades, c.last_deal_date
+          FROM complexes c
+          LEFT JOIN regions r ON r.region_cd = c.api_sgg_cd AND r.level = 'sgg'
+               AND r.boundary_version = (SELECT version FROM boundary_versions WHERE is_active)
+          CROSS JOIN LATERAL (SELECT COUNT(*) AS n FROM trades WHERE apt_seq = c.apt_seq) t
+         WHERE c.geocode_status IN ('pending', 'failed')
+         ORDER BY t.n DESC, c.apt_seq""").fetchall()

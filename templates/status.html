@@ -141,6 +141,7 @@
 </div>
 <p class="meta">좌표가 없는 단지가 쌓이면 이 PC에서 연속지적도 좌표 도구를 실행하세요(런북 docs/runbooks/geo-data.md A).
   좌표가 없어도 법정동 코드로 읍면동을 판정하므로 집계는 빠지지 않습니다.</p>
+<p class="meta"><a href="/status/no-coords.csv">좌표 없는 단지 전부 내려받기(CSV: 단지명·지번 주소·도로명·거래 수)</a></p>
 <p class="meta">활성 경계 {{ g.boundary_version or '없음' }} · 마지막 처리 {{ g.pipeline.last_run or '-' }}
   {% if g.pipeline.last_error %}<span class="err">· {{ g.pipeline.last_error }}</span>{% endif %}
   {% if g.pipeline.sync_error %}<span class="err">· {{ g.pipeline.sync_error }}</span>{% endif %}

@@ -129,6 +129,16 @@ def test_complex_page(client, seeded):
     assert client.get("/complexes/ZZZ").status_code == 404
 
 
+def test_no_coords_csv(client, seeded):
+    """좌표 없는 단지 전부를 주소와 함께 CSV로(엑셀용 BOM)."""
+    resp = client.get("/status/no-coords.csv")
+    assert resp.status_code == 200 and "no_coords_complexes.csv" in resp.headers["Content-Disposition"]
+    text = resp.get_data(as_text=True)
+    assert text.startswith("﻿단지 코드,단지명,상태,시군구,법정동,지번,지번 주소")
+    assert "무교타워,못 찾음" in text and "청운아파트" not in text
+    assert "/status/no-coords.csv" in client.get("/status").get_data(as_text=True)
+
+
 def test_export_page(client, seeded):
     html = client.get("/export").get_data(as_text=True)
     assert 'id="export-form"' in html and "/export/codebook.csv" in html
