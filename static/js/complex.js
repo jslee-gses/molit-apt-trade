@@ -31,7 +31,7 @@
       ...base, legend: { show: false }, grid: { left: 48, right: 12, top: 16, bottom: 28 },
       xAxis: { ...base.xAxis, data: labels },
       tooltip: { ...base.tooltip, valueFormatter: (v) => `${App.fmt.int(v)}${unit}` },
-      series: [{ name: '거래 수', type: 'bar', data: counts, color: App.seriesColor(0), barMaxWidth: 28, itemStyle: { borderRadius: [4, 4, 0, 0] } }],
+      series: [{ name: '거래 수', type: 'bar', data: counts, color: App.seriesColor(0), barMaxWidth: 28 }],
     });
   };
   bar(el('areas'), BANDS.map((b) => b[1]), BANDS.map(([, , test]) => trades.filter((t) => t.area != null && test(t.area)).length), '건');
