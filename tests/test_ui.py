@@ -98,3 +98,16 @@ def test_theme_switch_in_topbar(client, app):
         # 화면을 그리기 전에 data-theme을 정하는 head 스크립트(깜빡임 방지)
         head = html.split("</head>")[0]
         assert "data-theme" in head and "localStorage" in head and "prefers-color-scheme" in head
+
+
+def test_static_assets_cached_long_with_version(client):
+    """화면을 옮길 때마다 정적 파일을 서버에 다시 확인하지 않도록 긴 캐시 + 배포 버전 쿼리(새 배포 때 새 주소)."""
+    import app as app_module
+    html = client.get("/status").get_data(as_text=True)
+    v = app_module.ASSET_VERSION
+    assert v and f"/static/css/app.css?v={v}" in html and f"/static/fonts/pretendard/pretendard.css?v={v}" in html
+    assert f"/static/js/theme.js?v={v}" in html
+    for path in ("/static/css/app.css", "/static/fonts/pretendard/OFL.txt"):
+        resp = client.get(path)
+        assert resp.status_code == 200 and "max-age=31536000" in resp.headers["Cache-Control"]
+        resp.close()
