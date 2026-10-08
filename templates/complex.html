@@ -1,7 +1,17 @@
 {% extends "base.html" %}
 {% import "_ui.html" as ui %}
 {% block title %}{{ c.apt_nm }} · 아파트 실거래가{% endblock %}
-{% block page_head %}{{ ui.page_head(c.apt_nm, c.region_name or '지역 미판정') }}{% endblock %}
+{% block page_head %}
+{# 상위 행정구역으로 돌아가기: 단지 검색 화면을 그 지역 선택 상태로 연다 #}
+<nav class="page-crumbs" aria-label="행정구역 경로">
+  <a href="/complexes">단지</a>
+  {% set ns = namespace(q=[]) %}
+  {% for r in crumbs %}{% set ns.q = ns.q + [r.level ~ '=' ~ r.region_cd] %}
+  <span aria-hidden="true">›</span> <a href="/complexes?{{ ns.q|join('&') }}">{{ r.name }}</a>
+  {% endfor %}
+  <span aria-hidden="true">›</span> <b aria-current="page">{{ c.apt_nm or c.apt_seq }}</b>
+</nav>
+{{ ui.page_head(c.apt_nm, c.region_name or '지역 미판정') }}{% endblock %}
 {% block body %}
 <div class="toolbar" style="margin-bottom:16px">
   <span class="badge">신고 법정동 {{ c.api_umd_nm or '-' }}</span>

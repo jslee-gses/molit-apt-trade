@@ -131,4 +131,5 @@ def complex_page(apt_seq):
         abort(503)
     except LookupError:
         abort(404)
-    return render_template("complex.html", p=jobs.progress(), c=detail["complex"], trades=detail["trades"][:200])
+    return render_template("complex.html", p=jobs.progress(), c=detail["complex"], trades=detail["trades"][:200],
+                           crumbs=detail["crumbs"])
