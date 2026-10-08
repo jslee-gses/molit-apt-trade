@@ -255,6 +255,7 @@ def main(argv=None):
     parser.add_argument("--src-crs", help="경계 파일에 .prj가 없을 때 좌표계")
     parser.add_argument("--encoding", help="속성 인코딩(기본: 자동). 한글이 깨지면 cp949 지정")
     parser.add_argument("--source", default="", help="출처 메모(meta.json에 기록)")
+    parser.add_argument("--fill-parcels", help="연속지적도 AL_D002_*.zip 폴더: 읍면동 경계에 빠진 읍면동을 필지로 채운다(geo/parcel_fill.py)")
     args = parser.parse_args(argv)
 
     if not re.fullmatch(r"\d{4}-\d{2}", args.version):
@@ -269,6 +270,20 @@ def main(argv=None):
         for c in e.codes:
             print(f"  {c}")
         return 1
+    if args.fill_parcels:
+        from geo import parcel_fill
+
+        filled = parcel_fill.fill(args.fill_parcels, emd, read_code_map())
+        if len(filled):
+            sgg_ok = set(codes_df["LAWD_CD"])
+            filled = filled[filled["emd_cd"].str[:5].isin(sgg_ok)]
+            names = read_code_names()
+            filled["name"] = [names.get(c, n) for c, n in zip(filled["emd_cd"], filled["name"])]
+            print(f"연속지적도로 채운 읍면동 {len(filled)}개:")
+            for c, n, g in zip(filled["emd_cd"], filled["name"], filled.geometry):
+                print(f"  {c} {n} {g.area / 1e6:.2f}km²")
+            emd = pd.concat([emd, filled], ignore_index=True)
+            emd = gpd.GeoDataFrame(emd, geometry="geometry", crs=filled.crs)
     sgg_original = load_sgg(args.sgg_shp, args.src_crs, args.encoding) if args.sgg_shp else None
     regions = build(emd, codes_df, args.version, args.source or str(args.shp), sgg_original=sgg_original)
     print(f"경계 {args.version}: " + ", ".join(f"{k} {v}개" for k, v in regions["level"].value_counts().items()))
