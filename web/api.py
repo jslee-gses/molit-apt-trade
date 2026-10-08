@@ -53,7 +53,7 @@ def manual_coords(apt_seq):
     return jsonify(ok=True)
 
 
-CACHED = {"api.regions_", "api.agg", "api.map_", "api.summary"}
+CACHED = {"api.regions_", "api.agg", "api.map_", "api.summary", "api.complexes_locations"}
 
 
 @bp.errorhandler(BadParam)
@@ -141,7 +141,7 @@ def complexes_search():
 def complexes_locations():
     with db.connection() as conn:
         rows = queries.complex_locations(conn, request.args.get("q") or None, request.args.get("region") or None)
-    return jsonify(complexes=rows)
+    return jsonify(fields=["apt_seq", "apt_nm", "lon", "lat"], complexes=rows)
 
 
 @bp.route("/complexes/<apt_seq>")

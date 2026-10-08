@@ -210,16 +210,19 @@ def complex_detail(conn, version, apt_seq):
     return dict(complex=row, trades=trades)
 
 
-def complex_locations(conn, q=None, region=None, limit=3000):
-    """단지 화면 지도: 검색 목록과 같은 조건(단지명·지역)의 좌표 있는 단지, 최근 거래 순 최대 limit개."""
+def complex_locations(conn, q=None, region=None):
+    """단지 화면 지도: 검색 목록과 같은 조건(단지명·지역)의 좌표 있는 단지 전부(전 기간 거래, 전국 약 4만여 개).
+    → [[apt_seq, apt_nm, lon, lat], ...] (응답을 작게 하려고 배열, 좌표 소수 6자리)"""
     where, args = _region_filter(region)
     if q:
         where += " AND c.apt_nm ILIKE %s"
         args.append(f"%{q}%")
-    return conn.execute("""
-        SELECT c.apt_seq, c.apt_nm, c.lon, c.lat FROM complexes c
+    rows = conn.execute("""
+        SELECT c.apt_seq, c.apt_nm, round(c.lon::numeric, 6)::float8 AS lon, round(c.lat::numeric, 6)::float8 AS lat
+          FROM complexes c
          WHERE c.geocode_status IN ('ok', 'manual') AND c.lon IS NOT NULL AND c.lat IS NOT NULL""" + where +
-                        " ORDER BY c.last_deal_date DESC NULLS LAST, c.apt_seq LIMIT %s", [*args, limit]).fetchall()
+                        " ORDER BY c.apt_seq", args).fetchall()
+    return [[r["apt_seq"], r["apt_nm"], r["lon"], r["lat"]] for r in rows]
 
 
 def nearby(conn, version, apt_seq, limit=500):
