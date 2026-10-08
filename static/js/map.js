@@ -131,7 +131,7 @@
       },
       geo: {
         map: name, nameProperty: nameKey(data.level), roam: true, selectedMode: 'single',
-        top: 12, bottom: 12, left: 8, right: 8, tooltip: { show: true },
+        top: 64, bottom: 12, left: 8, right: 8, tooltip: { show: true },   // 위쪽은 지도 안 경로 상자 자리
         regions: data.values.map((v) => {
           const c = colorFor(v[field], kind, sc);
           return { name: v.region_cd, itemStyle: { areaColor: c }, emphasis: { itemStyle: { areaColor: c } }, select: { itemStyle: { areaColor: c } } };
@@ -150,7 +150,7 @@
     const parts = [{ level: 'sido', parent: '', name: '전국' }];
     for (const p of data.parents) parts.push({ level: NEXT[p.level], parent: p.region_cd, name: p.name });
     el('crumbs').innerHTML = parts.map((p, i) => (i === parts.length - 1 ? `<b>${esc(p.name)}</b>`
-      : `<a href="#" data-level="${esc(p.level)}" data-parent="${esc(p.parent)}">${esc(p.name)}</a>`)).join(' › ');
+      : `<a href="#" data-level="${esc(p.level)}" data-parent="${esc(p.parent)}">${esc(p.name)}</a>`)).join('<span aria-hidden="true">›</span>');
     el('crumbs').querySelectorAll('a').forEach((a) => {
       a.onclick = (ev) => {
         ev.preventDefault();

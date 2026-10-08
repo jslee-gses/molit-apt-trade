@@ -166,12 +166,16 @@ a.rank-item { grid-template-columns:48px minmax(0,1fr) auto; }
 
 /* 지도 화면 */
 .map-layout { display:grid; grid-template-columns:minmax(0, 1.35fr) minmax(320px, 1fr); gap:16px; align-items:start; }
-.map-card { padding:12px; }
+.map-card { padding:12px; position:relative; }
+/* 지도 왼쪽 위 행정구역 경로(전국 › 시도 › 시군구): 지도 위에서도 잘 보이게 상자로 띄운다 */
+.map-crumbs { position:absolute; top:24px; left:24px; z-index:2; display:flex; flex-wrap:wrap; align-items:center; gap:8px;
+  max-width:calc(100% - 48px); padding:8px 14px; background:var(--card); border:1px solid var(--line);
+  font-size:16px; color:var(--muted); }
+.map-crumbs a { font-weight:600; }
+.map-crumbs b { color:var(--ink); font-weight:800; }
 .rank-card { display:flex; flex-direction:column; gap:12px; max-height:584px; }
 .rank-card > input { flex:0 0 auto; }
 .rank-card .rank-list { overflow-y:auto; min-height:0; flex:1 1 auto; }
-.crumbs { margin-left:auto; color:var(--muted); font-size:14px; }
-.crumbs b { color:var(--ink); }
 .page-crumbs { display:flex; flex-wrap:wrap; gap:6px; align-items:center; color:var(--muted); font-size:14px; margin:0 0 10px; }
 .page-crumbs a { font-weight:600; }
 .page-crumbs b { color:var(--ink); }
@@ -224,5 +228,4 @@ ul.notes { color:var(--muted); font-size:14px; padding-left:18px; line-height:1.
   .topbar { position:static; }
   .topbar-in { gap:8px; }
   .topbar nav a { padding:10px 8px; }
-  .crumbs { margin-left:0; }
 }
