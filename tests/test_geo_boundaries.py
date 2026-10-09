@@ -54,13 +54,16 @@ def test_build_writes_files(tmp_path):
     regions = boundaries.build(emd, codes.load_codes(), "2026-10", "테스트", tmp_path / "static", tmp_path / "data")
 
     web = tmp_path / "static" / "2026-10"
-    # 전국(시도 단계) = 시군구 경계에 시도 코드, 시도별 시군구, 시군구별 읍면동
-    nation = json.loads((web / "nation.json").read_text(encoding="utf-8"))
-    assert sorted(f["properties"]["region_cd"] for f in nation["features"]) == ["11110", "11140"]
-    assert {f["properties"]["sido_cd"] for f in nation["features"]} == {"11"}
+    # 전국(시도 단계) = 시군구를 시도마다 합친 경계와 이름표 자리, 시도별 시군구, 시군구별 읍면동
+    sido = json.loads((web / "sido.json").read_text(encoding="utf-8"))
+    assert [f["properties"]["region_cd"] for f in sido["features"]] == ["11"]
+    props = sido["features"][0]["properties"]
+    assert props["name"] == "서울특별시" and props["sido_cd"] == "11"
+    lon, lat = props["cp"]
+    assert 126 < lon < 128 and 37 < lat < 38
     sgg = json.loads((web / "sgg_11.json").read_text(encoding="utf-8"))
     assert {f["properties"]["name"] for f in sgg["features"]} == {"종로구", "중구"}
-    assert not (web / "sido.json").exists() and not (web / "sgg.json").exists()
+    assert not (web / "nation.json").exists() and not (web / "sgg.json").exists()
     assert len(json.loads((web / "umd_11140.json").read_text(encoding="utf-8"))["features"]) == 1
     umd = json.loads((web / "umd_11110.json").read_text(encoding="utf-8"))
     assert len(umd["features"]) == 2
@@ -198,7 +201,7 @@ def test_load_emd_repairs_invalid_and_drops_empty(tmp_path):
 def test_coordinates_rounded_to_five_decimals(tmp_path):
     emd = boundaries.normalize_codes(emd_frame(ROWS), {"11110", "11140"}, {})
     boundaries.build(emd, codes.load_codes(), "2026-10", "t", tmp_path / "s", tmp_path / "d")
-    text = (tmp_path / "s" / "2026-10" / "nation.json").read_text(encoding="utf-8")
+    text = (tmp_path / "s" / "2026-10" / "sgg_11.json").read_text(encoding="utf-8")
     import re
     nums = re.findall(r"\d+\.(\d+)", text)
     assert nums and max(len(n) for n in nums) <= 5

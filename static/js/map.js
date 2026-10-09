@@ -49,59 +49,17 @@
   metricPills.value = state.metric;
   bandPills.value = state.band;
 
-  // 경계 파일: 전국(시도 단계) = 시군구 원본 경계를 시도 코드로 칠함, 시도 → 그 시도의 시군구, 시군구 → 그 시군구의 읍면동
+  // 경계 파일: 전국(시도 단계) = 시도 경계(시군구를 시도마다 합침, 이름표 자리 cp 포함), 시도 → 그 시도의 시군구,
+  // 시군구 → 그 시군구의 읍면동
   async function geo(version, level, parent) {
-    const file = level === 'sido' ? 'nation' : level === 'sgg' ? `sgg_${parent}` : `umd_${parent}`;
+    const file = level === 'sido' ? 'sido' : level === 'sgg' ? `sgg_${parent}` : `umd_${parent}`;
     const url = App.geoUrl(version, file);
     if (!geoCache[url]) {
       const resp = await fetch(url);
       if (!resp.ok) throw new Error('경계 파일을 불러오지 못했습니다.');
-      const fc = await resp.json();
-      geoCache[url] = level === 'sido' ? mergeSido(fc) : fc;
+      geoCache[url] = await resp.json();
     }
     return geoCache[url];
-  }
-  // 시도 단계는 시군구 경계를 시도 코드로 묶어 칠한다. 시군구마다 이름표가 겹쳐 뜨지 않게 시도마다 경계 하나로 합치고,
-  // 이름표 자리(cp)를 하나 정한다: 시도 전체 무게중심에서 가장 가까운 큰 시군구의 가운데(경기도처럼 가운데가 빈 시도도 시도 안에 뜬다)
-  function ringArea(r) {
-    let a = 0;
-    for (let i = 0, j = r.length - 1; i < r.length; j = i++) a += (r[j][0] + r[i][0]) * (r[j][1] - r[i][1]);
-    return Math.abs(a) / 2;
-  }
-  function ringCentroid(r) {
-    let x = 0, y = 0, a = 0;
-    for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
-      const f = r[j][0] * r[i][1] - r[i][0] * r[j][1];
-      x += (r[j][0] + r[i][0]) * f; y += (r[j][1] + r[i][1]) * f; a += f;
-    }
-    return a ? [x / (3 * a), y / (3 * a)] : r[0];
-  }
-  function inRing([px, py], r) {
-    let inside = false;
-    for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
-      const [xi, yi] = r[i], [xj, yj] = r[j];
-      if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) inside = !inside;
-    }
-    return inside;
-  }
-  const inPolygon = (pt, poly) => inRing(pt, poly[0]) && !poly.slice(1).some((h) => inRing(pt, h));
-  function mergeSido(fc) {
-    const groups = {};
-    for (const f of fc.features) {
-      const g = f.geometry;
-      const polys = g.type === 'Polygon' ? [g.coordinates] : g.coordinates;
-      (groups[f.properties.sido_cd] ??= []).push(...polys);
-    }
-    const features = Object.entries(groups).map(([cd, polys]) => {
-      const parts = polys.map((p) => ({ p, a: ringArea(p[0]), c: ringCentroid(p[0]) }));
-      const total = parts.reduce((s, q) => s + q.a, 0) || 1;
-      const mid = [parts.reduce((s, q) => s + q.c[0] * q.a, 0) / total, parts.reduce((s, q) => s + q.c[1] * q.a, 0) / total];
-      const d = (q) => (q.c[0] - mid[0]) ** 2 + (q.c[1] - mid[1]) ** 2;
-      const big = parts.filter((q) => q.a >= Math.max(...parts.map((x) => x.a)) / 4 && inPolygon(q.c, q.p));
-      const cp = (big.length ? big : parts).sort((u, v) => d(u) - d(v))[0].c;
-      return { type: 'Feature', properties: { sido_cd: cd, cp }, geometry: { type: 'MultiPolygon', coordinates: polys } };
-    });
-    return { type: 'FeatureCollection', features };
   }
   const nameKey = (level) => (level === 'sido' ? 'sido_cd' : 'region_cd');
 
