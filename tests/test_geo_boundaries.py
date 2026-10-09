@@ -219,3 +219,20 @@ def test_gzip_is_reproducible_and_code_map_zero_pads(tmp_path):
 def test_main_rejects_bad_version_before_reading(capsys):
     assert boundaries.main(["--shp", "does-not-exist.shp", "--version", "2026-9"]) == 1
     assert "YYYY-MM" in capsys.readouterr().out
+
+
+def test_extend_outline_fills_north_band(tmp_path):
+    """국토 윤곽(Natural Earth 형식)과 화면용 시군구 사이 접경지역 빈 띠를 맞닿은 시군구에 나눠 붙인다."""
+    outline = gpd.GeoDataFrame({"ADM0_A3": ["KOR", "PRK"]},
+                               geometry=[box(127.0, 37.9, 127.3, 38.1), box(127.0, 38.1, 127.3, 38.6)], crs="EPSG:4326")
+    path = tmp_path / "ne.shp"
+    outline.to_file(path)
+    sgg = gpd.GeoDataFrame({"region_cd": ["41800", "51780", "11110"], "sido_cd": ["41", "51", "11"]},
+                           geometry=[box(127.0, 37.9, 127.15, 38.0), box(127.15, 37.9, 127.3, 38.0),
+                                     box(126.9, 37.5, 127.0, 37.6)], crs="EPSG:4326").to_crs("EPSG:5179")
+    out, added = boundaries.extend_outline(sgg, path)
+    assert set(added) == {"41800", "51780"}                       # 띠에 맞닿지 않은 시군구는 그대로
+    assert 120 < added["41800"] < 170 and 120 < added["51780"] < 170   # 띠(약 290km²)를 가까운 쪽으로 반씩
+    west = out.set_index("region_cd").to_crs("EPSG:4326").geometry
+    assert west["41800"].bounds[3] > 38.09 and west["41800"].bounds[2] < 127.17   # 북쪽으로 늘고 서쪽 절반만
+    assert west["11110"].equals(sgg.set_index("region_cd").to_crs("EPSG:4326").geometry["11110"])

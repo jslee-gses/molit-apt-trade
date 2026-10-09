@@ -162,6 +162,66 @@ def choose_sgg(dissolved, original):
     return out, fallback
 
 
+OUTLINE_BOX = (126.68, 37.8, 129.5, 38.7)  # 경도·위도: 접경지역(민통선·비무장지대 남쪽) 빈 띠를 찾는 범위(서쪽 한강 하구 물길은 뺀다)
+OUTLINE_MIN_KM2 = 100                      # 이보다 작은 조각(거친 해안선·강 때문에 생긴 띠)은 버린다
+
+
+def extend_outline(sgg_web, outline_path):
+    """화면용 시군구 경계를 국토 윤곽(Natural Earth 1:1천만, 퍼블릭 도메인)까지 늘린다.
+    국토지리정보원 경계·연속지적도 모두 빠진 접경지역 띠(민통선 북쪽~비무장지대 남쪽)를 겉모습만 채운다.
+    띠는 맞닿은 시군구 경계에서 가까운 쪽으로 나눠 붙인다(경계선 점들의 보로노이). 읍면동·지역 판정은 바꾸지 않는다.
+    → (sgg_web, {시군구 코드: 늘어난 km²})"""
+    ne = gpd.read_file(outline_path)
+    kor = ne[ne["ADM0_A3"] == "KOR"].to_crs(METRIC_CRS)
+    if kor.empty:
+        raise SystemExit(f"{outline_path}에 대한민국(ADM0_A3=KOR) 윤곽이 없습니다.")
+    union = shapely.union_all(sgg_web.geometry.values)
+    area = gpd.GeoSeries([shapely.box(*OUTLINE_BOX)], crs="EPSG:4326").to_crs(METRIC_CRS).iloc[0]
+    gap = shapely.union_all(kor.geometry.values).intersection(area).difference(union)
+    gap = gap.buffer(-300, join_style="mitre").buffer(300, join_style="mitre")
+    parts = [g for g in getattr(gap, "geoms", [gap]) if g.area >= OUTLINE_MIN_KM2 * 1e6]
+    if not parts:
+        return sgg_web, {}
+    gap = shapely.union_all(parts)
+    # 띠에 맞닿은 시군구 경계선의 점(100m 간격)으로 보로노이를 나눠 가까운 시군구에 붙인다
+    near = gap.buffer(500)
+    pts, owner = [], []
+    for code, geom in zip(sgg_web["region_cd"], sgg_web.geometry):
+        geom = _polygonal(geom)                   # 도형 모음(GeometryCollection)은 boundary가 없다
+        if geom is None or not geom.intersects(near):
+            continue
+        edge = geom.boundary.intersection(near)
+        if edge.is_empty:
+            continue
+        for line in getattr(edge, "geoms", [edge]):
+            if line.length == 0:
+                continue
+            for d in range(0, int(line.length) + 1, 100):
+                pts.append(line.interpolate(d))
+                owner.append(code)
+    if not pts:
+        return sgg_web, {}
+    cells = shapely.voronoi_polygons(shapely.MultiPoint(pts), extend_to=gap.envelope.buffer(10_000))
+    tree = shapely.STRtree(pts)
+    pieces = {}
+    for cell in cells.geoms:
+        idx = tree.query(cell, predicate="contains")
+        if len(idx):
+            pieces.setdefault(owner[idx[0]], []).append(cell)
+    added = {}
+    geoms = []
+    for code, geom in zip(sgg_web["region_cd"], sgg_web.geometry):
+        if code in pieces and geom is not None:
+            extra = shapely.union_all(pieces[code]).intersection(gap)
+            if not extra.is_empty and extra.area > 1e5:
+                geom = _polygonal(shapely.union_all([geom, extra]))
+                added[code] = round(extra.area / 1e6, 1)
+        geoms.append(geom)
+    out = sgg_web.copy()
+    out["geometry"] = gpd.GeoSeries(geoms, index=out.index, crs=sgg_web.crs)
+    return out, added
+
+
 def _to_web(gdf, precise=True):
     out = gdf.to_crs("EPSG:4326")
     if precise:
@@ -194,9 +254,10 @@ def _write_geojson(gdf, path, props, gz=False):
         path.write_text(text, encoding="utf-8")
 
 
-def build(emd, codes_df, version, source, static_dir=None, data_dir=None, sgg_original=None):
+def build(emd, codes_df, version, source, static_dir=None, data_dir=None, sgg_original=None, outline=None):
     """emd: normalize_codes를 거친 읍면동(EPSG:5179, 열 emd_cd·name·geometry).
-    sgg_original: load_sgg 결과(없으면 시군구를 읍면동 합으로 만든다)."""
+    sgg_original: load_sgg 결과(없으면 시군구를 읍면동 합으로 만든다).
+    outline: 국토 윤곽 파일(Natural Earth admin 0). 있으면 화면용 시군구를 접경지역 빈 띠까지 늘린다(extend_outline)."""
     static_dir = Path(static_dir or STATIC_GEO) / version
     data_dir = Path(data_dir or GEO_DATA) / version
     sgg_names = dict(zip(codes_df["LAWD_CD"], codes_df["시군구"]))
@@ -222,6 +283,9 @@ def build(emd, codes_df, version, source, static_dir=None, data_dir=None, sgg_or
     sgg_web, fallback = choose_sgg(sgg, sgg_original)
     if sgg_original is not None and fallback:
         print(f"시군구 원본 대신 읍면동 합을 쓴 곳 {len(fallback)}개(2026 개편 등): {', '.join(fallback)}")
+    if outline is not None:
+        sgg_web, added = extend_outline(sgg_web, outline)
+        print(f"국토 윤곽으로 화면 경계를 늘린 시군구 {len(added)}개: " + ", ".join(f"{c} +{a}km²" for c, a in added.items()))
     sgg_web = _display(sgg_web)
     _write_geojson(sgg_web, static_dir / "nation.json", ["region_cd", "name", "sido_cd"])
     for sido_cd, part in sgg_web.groupby("sido_cd"):
@@ -255,6 +319,7 @@ def main(argv=None):
     parser.add_argument("--src-crs", help="경계 파일에 .prj가 없을 때 좌표계")
     parser.add_argument("--encoding", help="속성 인코딩(기본: 자동). 한글이 깨지면 cp949 지정")
     parser.add_argument("--source", default="", help="출처 메모(meta.json에 기록)")
+    parser.add_argument("--outline", help="국토 윤곽 ne_10m_admin_0_countries.zip(Natural Earth, 퍼블릭 도메인): 화면용 접경지역 빈 띠 채움")
     parser.add_argument("--fill-parcels", help="연속지적도 AL_D002_*.zip 폴더: 읍면동 경계에 빠진 읍면동을 필지로 채운다(geo/parcel_fill.py)")
     args = parser.parse_args(argv)
 
@@ -285,7 +350,8 @@ def main(argv=None):
             emd = pd.concat([emd, filled], ignore_index=True)
             emd = gpd.GeoDataFrame(emd, geometry="geometry", crs=filled.crs)
     sgg_original = load_sgg(args.sgg_shp, args.src_crs, args.encoding) if args.sgg_shp else None
-    regions = build(emd, codes_df, args.version, args.source or str(args.shp), sgg_original=sgg_original)
+    regions = build(emd, codes_df, args.version, args.source or str(args.shp), sgg_original=sgg_original,
+                    outline=args.outline)
     print(f"경계 {args.version}: " + ", ".join(f"{k} {v}개" for k, v in regions["level"].value_counts().items()))
     for base in (STATIC_GEO, GEO_DATA):
         for f in sorted((base / args.version).glob("*")):
