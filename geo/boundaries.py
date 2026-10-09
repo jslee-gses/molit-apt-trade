@@ -9,10 +9,10 @@
 - 경계 코드의 시군구(앞 5자리)가 lawd_codes.csv에 없으면 geo/code_map.csv로 바꾸고, 그래도 없으면 목록을 출력하고 멈춘다.
 - 시군구 화면 경계는 국토지리정보원 행정경계(시군구) N3A_G0100000 원본(CC BY)을 쓴다. 원본에 없거나 읍면동 합과
   면적이 다른 시군구(2026 개편 등)만 읍면동을 합쳐 대신한다. 시도 원본은 변경금지(CC BY-NC-ND)라 쓰지 않고,
-  전국(시도 단계) 화면은 시군구 경계를 시도 코드로 칠한다. 지역 목록의 시군구·시도와 판정은 읍면동 기준이다.
+  전국(시도 단계) 화면은 시군구 경계를 시도마다 합친 sido.json으로 그린다. 지역 목록의 시군구·시도와 판정은 읍면동 기준이다.
 - 화면용은 원본을 1m만 단순화하고 작은 섬도 남긴다. 원본이 도로·하천을 따라 붙인 폭 4m 미만의 띠만 깎는다.
 결과:
-  static/geo/{version}/nation.json, sgg_{시도코드}.json, umd_{시군구코드}.json   화면용(EPSG:4326)
+  static/geo/{version}/sido.json, sgg_{시도코드}.json, umd_{시군구코드}.json   화면용(EPSG:4326)
   geo_data/{version}/umd_assign.geojson.gz, regions.csv, meta.json  지역 판정·목록용
 """
 import argparse
@@ -34,7 +34,7 @@ GEO_DATA = settings.BASE_DIR / "geo_data"
 CODE_MAP = settings.BASE_DIR / "geo" / "code_map.csv"
 METRIC_CRS = "EPSG:5179"
 # 단순화 허용 오차(m). 화면용은 원본과 눈으로 구분되지 않는 1m만 단순화하고 작은 섬도 지우지 않는다.
-TOLERANCE_M = {"assign": 5, "display": 1}
+TOLERANCE_M = {"assign": 5, "display": 1, "sido": 10}   # 시도(전국 화면)는 10m: 24MB → 7MB, 전국 축척에서 차이 없음
 SLIVER_M = 2        # 화면용: 폭 2×SLIVER_M(4m) 미만의 가는 띠(원본이 도로·하천을 따라 붙인 꼬리)를 깎아낸다
 AREA_MATCH = 0.005   # 시군구 원본과 (개편 반영) 읍면동 합의 면적 차이가 이보다 크면 원본 대신 읍면동 합을 쓴다
 
@@ -128,10 +128,10 @@ def _drop_slivers(gdf, w=SLIVER_M):
     return out
 
 
-def _display(gdf):
+def _display(gdf, tolerance=TOLERANCE_M["display"]):
     # 화면용은 좌표 정밀도 맞춤(set_precision)을 하지 않는다: 1m 단순화에서는 맞닿은 고리가 생겨 위상 오류가 날 수 있고,
     # 좌표는 쓸 때 소수 5자리(약 1m)로 반올림한다
-    return _to_web(_simplify(_drop_slivers(gdf), TOLERANCE_M["display"]), precise=False)
+    return _to_web(_simplify(_drop_slivers(gdf), tolerance), precise=False)
 
 
 def load_sgg(path, src_crs=None, encoding=None):
@@ -160,6 +160,20 @@ def choose_sgg(dissolved, original):
     out = dissolved.copy()
     out["geometry"] = gpd.GeoSeries(rows, index=out.index, crs=dissolved.crs)
     return out, fallback
+
+
+def _label_points(gdf):
+    """도형마다 이름표 자리(가장 큰 조각 안에서 경계에서 가장 먼 점, 경위도 소수 4자리).
+    무게중심은 경기도처럼 가운데가 빈 도형에서 밖(서울)에 찍힌다."""
+    from shapely.ops import polylabel
+
+    out = []
+    for g in gdf.geometry:
+        part = max(getattr(g, "geoms", [g]), key=lambda p: p.area)
+        pt = polylabel(part, tolerance=200)
+        ll = gpd.GeoSeries([pt], crs=gdf.crs).to_crs("EPSG:4326").iloc[0]
+        out.append([round(ll.x, 4), round(ll.y, 4)])
+    return out
 
 
 def _to_web(gdf, precise=True):
@@ -222,8 +236,15 @@ def build(emd, codes_df, version, source, static_dir=None, data_dir=None, sgg_or
     sgg_web, fallback = choose_sgg(sgg, sgg_original)
     if sgg_original is not None and fallback:
         print(f"시군구 원본 대신 읍면동 합을 쓴 곳 {len(fallback)}개(2026 개편 등): {', '.join(fallback)}")
+    # 전국(시도 단계) 화면: 시군구 경계를 시도마다 하나로 합친 시도 경계와 이름표 자리(cp, 시도 안 가장 깊은 곳)
+    sido_web = sgg_web[["sido_cd", "geometry"]].dissolve(by="sido_cd").reset_index()
+    sido_web["geometry"] = gpd.GeoSeries([_polygonal(g) for g in sido_web.geometry], index=sido_web.index,
+                                         crs=sido_web.crs)
+    sido_web["region_cd"] = sido_web["sido_cd"]
+    sido_web["name"] = sido_web["sido_cd"].map(sido_names)
+    sido_web["cp"] = _label_points(sido_web)
+    _write_geojson(_display(sido_web, TOLERANCE_M["sido"]), static_dir / "sido.json", ["region_cd", "name", "sido_cd", "cp"])
     sgg_web = _display(sgg_web)
-    _write_geojson(sgg_web, static_dir / "nation.json", ["region_cd", "name", "sido_cd"])
     for sido_cd, part in sgg_web.groupby("sido_cd"):
         _write_geojson(part, static_dir / f"sgg_{sido_cd}.json", ["region_cd", "name", "sido_cd"])
     for sgg_cd, part in umd.groupby("sgg_cd"):
