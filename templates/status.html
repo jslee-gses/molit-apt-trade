@@ -130,7 +130,7 @@
   <div class="tile"><div class="k">좌표 확보 단지</div>
     <div class="v">{{ g.located|comma }} / {{ g.total|comma }}</div>
     <div class="meter"><i style="width:{{ g.located_pct }}%"></i></div>
-    <div class="k">필지 {{ g.parcel|comma }} · 근처 지번 {{ g.parcel_near|comma }} · 재건축 {{ g.rebuild|comma }} · 수동 {{ g.manual|comma }}</div></div>
+    <div class="k">필지 {{ g.parcel|comma }} · 근처 지번 {{ g.parcel_near|comma }} · 재건축 {{ g.rebuild|comma }} · 사용자 {{ g.user_geocoded|comma }} · 수동 {{ g.manual|comma }}</div></div>
   <div class="tile"><div class="k">좌표 없음 (대기 · 못 찾음)</div>
     <div class="v {{ 'warn' if g.pending or g.failed }}">{{ g.pending|comma }} · {{ g.failed|comma }}</div></div>
   <div class="tile"><div class="k">지역 판정 (경계 · 법정동 코드 · 미판정)</div>

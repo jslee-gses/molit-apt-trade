@@ -7,7 +7,7 @@
 - --min 이상 확신도이고 제안 출처가 --sources 중 하나로 시작하는 행만 넣는다(기본: 중간 이상, 근처 지번·재건축).
   브이월드 API에서 온 좌표는 약관 확인 전에는 넣지 않도록 기본값에서 뺐다.
 - '재건축 새 단지'는 좌표 대신 새 단지 코드를 받아, 저장 시점의 그 단지 좌표(ok·manual)를 복사한다.
-- 좌표 없는 단지(pending·failed)만 바꾼다. 저장하면 geocode_status ok, geocode_source parcel_near / rebuild,
+- 좌표 없는 단지(pending·failed)만 바꾼다. 저장하면 geocode_status ok, geocode_source parcel_near / rebuild / user(사용자가 따로 찾은 좌표),
   지역 판정을 지워 다음 지리 처리가 경계로 다시 판정한다.
 - 시작할 때 대상 DB(host:port/dbname)를 출력한다. 로컬이 아닌 DB는 --yes가 있어야 저장한다.
 """
@@ -18,7 +18,7 @@ import os
 import sys
 
 LEVELS = {"높음": 0, "중간": 1, "낮음": 2}
-SOURCE_TAG = {"근처": "parcel_near", "재건축": "rebuild", "브이월드": "vworld"}
+SOURCE_TAG = {"근처": "parcel_near", "재건축": "rebuild", "사용자": "user", "브이월드": "vworld"}
 KOREA = (124.0, 33.0, 132.0, 39.0)
 
 
