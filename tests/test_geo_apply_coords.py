@@ -15,6 +15,7 @@ ROWS = [
     ["E", "근처 지번(같은 본번)", "높음", "200", "37.5", ""],        # 범위 밖
     ["F", "근처 지번(같은 본번)", "중간", "127.06", "37.56", ""],     # 그사이 좌표가 생김
     ["G", "재건축 새 단지", "중간", "", "", "NOCOORD"],               # 복사할 좌표 없음
+    ["H", "사용자 지오코딩", "높음", "127.08", "37.58", ""],          # 사용자가 따로 찾은 좌표(기본 출처에는 없음)
 ]
 
 
@@ -55,3 +56,9 @@ def test_main_dry_run_needs_no_db(tmp_path, capsys):
         csv.writer(f).writerows([HEAD, *ROWS])
     assert apply_coords.main(["--csv", str(path), "--dry-run"]) == 0
     assert "넣을 대상 4개" in capsys.readouterr().out
+
+
+def test_pick_user_source():
+    rows = [dict(zip(HEAD, r)) for r in ROWS]
+    assert apply_coords.pick(rows, "높음", ["사용자"]) == [("H", 127.08, 37.58, None, "user")]
+

@@ -98,9 +98,10 @@ def test_failed_ranks_candidates_by_recent_deal_before_counting(pg):
 def test_summary_counts_near_and_rebuild(pg, seeded):
     with pg.connection() as conn:
         conn.execute("""INSERT INTO complexes (apt_seq, api_sgg_cd, geocode_status, geocode_source, lon, lat) VALUES
-            ('N', '11110', 'ok', 'parcel_near', 126.9, 37.5), ('R', '11110', 'ok', 'rebuild', 126.9, 37.5)""")
+            ('N', '11110', 'ok', 'parcel_near', 126.9, 37.5), ('R', '11110', 'ok', 'rebuild', 126.9, 37.5),
+            ('U', '11110', 'ok', 'user', 126.9, 37.5)""")
         s = complexes.summary(conn)
-    assert (s["parcel"], s["parcel_near"], s["rebuild"], s["located"]) == (1, 1, 1, 3)
+    assert (s["parcel"], s["parcel_near"], s["rebuild"], s["user_geocoded"], s["located"]) == (1, 1, 1, 1, 4)
 
 
 def test_unassigned_reasons(pg, seeded):

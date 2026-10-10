@@ -103,6 +103,7 @@ def summary(conn):
                COUNT(*) FILTER (WHERE geocode_status = 'ok' AND geocode_source = 'parcel') AS parcel,
                COUNT(*) FILTER (WHERE geocode_status = 'ok' AND geocode_source = 'parcel_near') AS parcel_near,
                COUNT(*) FILTER (WHERE geocode_status = 'ok' AND geocode_source = 'rebuild') AS rebuild,
+               COUNT(*) FILTER (WHERE geocode_status = 'ok' AND geocode_source = 'user') AS user_geocoded,
                COUNT(*) FILTER (WHERE geocode_status = 'manual') AS manual,
                COUNT(*) FILTER (WHERE geocode_status = 'pending') AS pending,
                COUNT(*) FILTER (WHERE geocode_status = 'failed') AS failed,
