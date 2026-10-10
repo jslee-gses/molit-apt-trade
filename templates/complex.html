@@ -16,6 +16,7 @@
 {% block page_head %}
 {% if not has_loc %}{{ crumbs_nav('page-crumbs') }}{% endif %}
 {{ ui.page_head(c.apt_nm, c.region_name or '지역 미판정') }}{% endblock %}
+{% block body_class %}fit{% endblock %}
 {% block body %}
 <div class="toolbar" style="margin-bottom:16px">
   <span class="badge">신고 법정동 {{ c.api_umd_nm or '-' }}</span>
@@ -27,21 +28,26 @@
   {% if c.sgg_mismatch %}<span class="badge warn">신고 시군구와 좌표 시군구가 다름</span>{% endif %}
 </div>
 <p id="msg" class="meta"></p>
-<section class="card">
-  <h2 class="card-title">위치</h2>
-  {% if has_loc %}
-  <div class="map-wrap">{{ crumbs_nav('map-crumbs') }}<div id="loc" class="basemap small"></div></div>
-  <p class="table-foot">같은 읍면동 단지(회색)와 이 단지(강조). 점을 누르면 그 단지로 갑니다. 단지 위치는 필지 대표점입니다.</p>
-  {% else %}
-  <p class="meta">위치 정보 없음(좌표 미확보)</p>
-  {% endif %}
-</section>
-<section class="card"><h2 class="card-title">거래 가격 (해제 제외)</h2><div id="scatter" class="chart"></div></section>
-<div class="grid-2">
-  <section class="card"><h2 class="card-title">면적 구간별 거래 수</h2><div id="areas" class="chart small"></div></section>
-  <section class="card"><h2 class="card-title">층별 거래 수</h2><div id="floors" class="chart small"></div></section>
+{# 넓은 화면: 왼쪽 정사각형 지도 + 오른쪽 그래프(가격 / 면적·층)를 고정하고, 아래 최근 거래 목록만 스크롤 #}
+<div class="complex-top">
+  <section class="card loc-card">
+    <h2 class="card-title">위치</h2>
+    {% if has_loc %}
+    <div class="map-wrap loc-map">{{ crumbs_nav('map-crumbs') }}<div id="loc" class="basemap"></div></div>
+    <p class="table-foot" title="같은 읍면동 단지(회색)와 이 단지(강조). 점을 누르면 그 단지로 갑니다. 단지 위치는 필지 대표점입니다.">회색: 같은 읍면동 단지 · 강조: 이 단지 · 점을 누르면 이동</p>
+    {% else %}
+    <div class="loc-map loc-empty"><p class="meta">위치 정보 없음(좌표 미확보)</p></div>
+    {% endif %}
+  </section>
+  <div class="complex-charts">
+    <section class="card chart-card"><h2 class="card-title">거래 가격 (해제 제외)</h2><div id="scatter" class="chart"></div></section>
+    <div class="grid-2">
+      <section class="card chart-card"><h2 class="card-title">면적 구간별 거래 수</h2><div id="areas" class="chart small"></div></section>
+      <section class="card chart-card"><h2 class="card-title">층별 거래 수</h2><div id="floors" class="chart small"></div></section>
+    </div>
+  </div>
 </div>
-<section class="card">
+<section class="card trades-card">
   <h2 class="card-title">최근 거래 {{ trades|length }}건</h2>
   <div class="table-wrap"><table class="data-table">
     <thead><tr><th scope="col">계약일</th><th scope="col" class="num">거래금액(만원)</th><th scope="col" class="num">전용(㎡)</th><th scope="col" class="num">㎡당(만원)</th><th scope="col" class="num">층</th><th scope="col">동</th><th scope="col">거래유형</th></tr></thead>

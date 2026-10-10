@@ -232,3 +232,34 @@ ul.notes { color:var(--muted); font-size:14px; padding-left:18px; line-height:1.
   .topbar-in { gap:8px; }
   .topbar nav a { padding:10px 8px; }
 }
+
+/* 단지 상세: 왼쪽 정사각형 지도 + 오른쪽 그래프(가격 / 면적·층), 아래 최근 거래.
+   넓은 화면에서는 제목 부분이 먼저 올라간 뒤 지도·그래프가 상단 메뉴 아래에 고정되고, 그 아래로 거래 목록만 스크롤된다
+   (표 머리글도 고정). 좁거나 낮은 화면은 위에서 아래로 차례로 쌓는다. */
+.complex-top { display:grid; grid-template-columns:minmax(0, 1fr); gap:16px; margin-bottom:16px; }
+.complex-top .card, .complex-charts .card { margin-bottom:0; }
+.complex-charts { display:grid; gap:16px; min-width:0; }
+.loc-card { display:flex; flex-direction:column; }
+.loc-map { aspect-ratio:1 / 1; width:100%; }
+.loc-map #loc { height:100%; }
+.loc-empty { display:flex; align-items:center; justify-content:center; border:1px solid var(--line); background:var(--soft); }
+@media (min-width: 1100px) and (min-height: 700px) {
+  body.fit { --topbar-h:61px; --top-h:clamp(320px, 46vh, 540px); }
+  .complex-top { position:sticky; top:var(--topbar-h); z-index:5; background:var(--bg);
+    height:calc(var(--top-h) + 28px); padding:12px 0 16px; margin:-12px 0 0;
+    grid-template-columns:auto minmax(0, 1fr); }
+  /* 정사각형: 한 변 = 위쪽 높이 - (카드 위아래 여백 28 + 제목 30 + 설명 한 줄 24) */
+  .loc-card { --side:calc(var(--top-h) - 82px); height:100%; padding:14px 18px; overflow:hidden; }
+  .loc-card .card-title { margin-bottom:4px; }
+  .loc-map { width:var(--side); height:var(--side); flex:none; }
+  .loc-card .table-foot { width:var(--side); margin:6px 0 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .complex-charts { grid-template-rows:minmax(0, 3fr) minmax(0, 2fr); min-height:0; }
+  .complex-charts .grid-2 { min-height:0; }
+  .chart-card { display:flex; flex-direction:column; min-height:0; padding:14px 18px; }
+  .chart-card .card-title { font-size:15px; margin:0 0 2px; }
+  .chart-card .chart, .chart-card .chart.small { flex:1; min-height:0; height:auto; }
+  /* 거래 목록은 페이지와 함께 스크롤되고 위쪽 고정 영역 밑으로 지나간다. 표 머리글은 고정 영역 바로 아래에 붙는다 */
+  .trades-card .table-wrap { overflow:visible; }
+  .trades-card .data-table thead th { position:sticky; top:calc(var(--topbar-h) + var(--top-h) + 28px); z-index:4; }
+  .trades-card { min-height:calc(100vh - var(--topbar-h) - var(--top-h) - 28px); }
+}
