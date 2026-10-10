@@ -222,3 +222,25 @@ def test_gzip_is_reproducible_and_code_map_zero_pads(tmp_path):
 def test_main_rejects_bad_version_before_reading(capsys):
     assert boundaries.main(["--shp", "does-not-exist.shp", "--version", "2026-9"]) == 1
     assert "YYYY-MM" in capsys.readouterr().out
+
+
+def test_admdong_sgg_replaces_display_sgg(tmp_path):
+    """행정동 경계(admdongkor)를 시군구로 합쳐 시도·시군구 화면 경계로 쓴다. 읍면동·판정은 그대로."""
+    adm = gpd.GeoDataFrame({"adm_cd2": ["1111053000", "1111054000"], "adm_nm": ["사직동", "삼청동"]},
+                           geometry=[box(X0, Y0, X0 + 1000, Y0 + 2000), box(X0 + 1000, Y0, X0 + 3000, Y0 + 2000)],
+                           crs="EPSG:5179").to_crs("EPSG:4326")
+    path = tmp_path / "adm.geojson"
+    adm.to_file(path, driver="GeoJSON")
+    sgg = boundaries.load_admdong_sgg(path)
+    assert list(sgg["sgg_cd"]) == ["11110"] and abs(sgg.geometry.iloc[0].area - 6e6) < 1e3   # 행정동 둘이 하나로
+
+    emd = boundaries.normalize_codes(emd_frame(ROWS), {"11110", "11140"}, {})
+    boundaries.build(emd, codes.load_codes(), "2026-10", "t", tmp_path / "s", tmp_path / "d", admdong=sgg)
+    web = json.loads((tmp_path / "s" / "2026-10" / "sgg_11.json").read_text(encoding="utf-8"))
+    by = {f["properties"]["region_cd"]: f for f in web["features"]}
+    lon_max = max(pt[0] for ring in by["11110"]["geometry"]["coordinates"] for pt in
+                  (ring[0] if by["11110"]["geometry"]["type"] == "MultiPolygon" else ring))
+    assert lon_max > gpd.GeoSeries([box(X0, Y0, X0 + 2900, Y0 + 1)], crs="EPSG:5179").to_crs("EPSG:4326").total_bounds[2]
+    assert set(by) == {"11110", "11140"}                         # 행정동에 없는 중구는 읍면동 합 그대로
+    umd = json.loads((tmp_path / "s" / "2026-10" / "umd_11110.json").read_text(encoding="utf-8"))
+    assert len(umd["features"]) == 2                               # 읍면동(법정동)은 그대로

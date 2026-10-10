@@ -25,6 +25,7 @@ def test_dashboard(client, seeded):
     assert 'id="kpis"' in html and "echarts.min.js" in html and "js/dashboard.js" in html
     assert 'href="/trends"' in html and 'href="/map"' in html and 'href="/export"' in html
     assert "국토지리정보원" in html and "CC BY" in html    # 경계 출처 표시(라이선스 조건)
+    assert "통계청 SGIS" in html and "공공누리 제1유형" in html and "vuski/admdongkor" in html and "CC BY 4.0" in html
     assert '<header class="page-head">' in html
     assert 'id="up" class="rank-list"' in html and 'id="down" class="rank-list"' in html
     assert 'class="grid-2"' in html
