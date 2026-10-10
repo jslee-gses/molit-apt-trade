@@ -109,14 +109,15 @@ def test_complexes_bad_region(client, seeded):
 def test_complex_page_breadcrumb_back_to_regions(client, seeded):
     """단지 상세에서 판정된 행정구역 단계로 돌아가는 경로(단지 검색의 지역 선택 상태로)."""
     html = client.get("/complexes/A").get_data(as_text=True)
-    assert 'class="page-crumbs"' not in html                    # 위치 지도가 있으면 경로는 지도 상자 안
-    assert '<nav class="map-crumbs"' in html.split('<div class="map-wrap loc-map">')[1].split('id="loc"')[0]
+    head = html.split('class="loc-head"')[1].split('id="loc"')[0]      # 경로는 '위치' 제목 옆
+    assert '<nav class="loc-crumbs"' in head and "<h2 class=\"card-title\">위치</h2>" in head
+    assert 'class="page-crumbs"' not in html and 'class="map-crumbs"' not in html and "점을 누르면 이동" not in html
     assert 'href="/complexes">단지</a>' in html
     assert 'href="/complexes?sido=11">서울특별시</a>' in html
     assert 'href="/complexes?sido=11&amp;sgg=11110">종로구</a>' in html
     assert 'href="/complexes?sido=11&amp;sgg=11110&amp;umd=11110101">청운동</a>' in html
     c = client.get("/complexes/C").get_data(as_text=True)      # 읍면동 미판정: 신고 시군구까지
-    assert 'href="/complexes?sido=11&amp;sgg=11140">중구</a>' in c and "umd=" not in c.split('class="page-crumbs"')[1].split("</nav>")[0]
+    assert 'href="/complexes?sido=11&amp;sgg=11140">중구</a>' in c and "umd=" not in c.split('class="loc-crumbs"')[1].split("</nav>")[0]
 
 
 def test_complex_page(client, seeded):

@@ -2,9 +2,9 @@
 {% import "_ui.html" as ui %}
 {% block title %}{{ c.apt_nm }} · 아파트 실거래가{% endblock %}
 {% set has_loc = c.lon is not none and c.geocode_status in ('ok', 'manual') %}
-{# 상위 행정구역으로 돌아가기: 단지 검색 화면을 그 지역 선택 상태로 연다. 위치 지도가 있으면 지도 상자 안 왼쪽 위에 #}
+{# 상위 행정구역으로 돌아가기: 단지 검색 화면을 그 지역 선택 상태로 연다. '위치' 제목 옆에 #}
 {% macro crumbs_nav(cls) %}
-<nav class="{{ cls }}" aria-label="행정구역 경로">
+<nav class="{{ cls }}" aria-label="행정구역 경로" title="{% for r in crumbs %}{{ r.name }} › {% endfor %}{{ c.apt_nm or c.apt_seq }}">
   <a href="/complexes">단지</a>
   {% set ns = namespace(q=[]) %}
   {% for r in crumbs %}{% set ns.q = ns.q + [r.level ~ '=' ~ r.region_cd] %}
@@ -14,7 +14,6 @@
 </nav>
 {% endmacro %}
 {% block page_head %}
-{% if not has_loc %}{{ crumbs_nav('page-crumbs') }}{% endif %}
 {{ ui.page_head(c.apt_nm, c.region_name or '지역 미판정') }}{% endblock %}
 {% block body_class %}fit{% endblock %}
 {% block body %}
@@ -31,10 +30,9 @@
 {# 넓은 화면: 왼쪽 정사각형 지도 + 오른쪽 가격 그래프·요약 카드를 고정하고, 아래 최근 거래 목록만 스크롤 #}
 <div class="complex-top">
   <section class="card loc-card">
-    <h2 class="card-title">위치</h2>
+    <div class="loc-head"><h2 class="card-title">위치</h2>{{ crumbs_nav('loc-crumbs') }}</div>
     {% if has_loc %}
-    <div class="map-wrap loc-map">{{ crumbs_nav('map-crumbs') }}<div id="loc" class="basemap"></div></div>
-    <p class="table-foot" title="같은 읍면동 단지(회색)와 이 단지(강조). 점을 누르면 그 단지로 갑니다. 단지 위치는 필지 대표점입니다.">회색: 같은 읍면동 단지 · 강조: 이 단지 · 점을 누르면 이동</p>
+    <div class="loc-map"><div id="loc" class="basemap"></div></div>
     {% else %}
     <div class="loc-map loc-empty"><p class="meta">위치 정보 없음(좌표 미확보)</p></div>
     {% endif %}
