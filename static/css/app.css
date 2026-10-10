@@ -233,7 +233,7 @@ ul.notes { color:var(--muted); font-size:14px; padding-left:18px; line-height:1.
   .topbar nav a { padding:10px 8px; }
 }
 
-/* 단지 상세: 왼쪽 정사각형 지도 + 오른쪽 그래프(가격 / 면적·층), 아래 최근 거래.
+/* 단지 상세: 왼쪽 정사각형 지도 + 오른쪽 가격 그래프와 요약 카드(면적 구간·최고가·최저가), 아래 최근 거래.
    넓은 화면에서는 제목 부분이 먼저 올라간 뒤 지도·그래프가 상단 메뉴 아래에 고정되고, 그 아래로 거래 목록만 스크롤된다
    (표 머리글도 고정). 좁거나 낮은 화면은 위에서 아래로 차례로 쌓는다. */
 .complex-top { display:grid; grid-template-columns:minmax(0, 1fr); gap:16px; margin-bottom:16px; }
@@ -243,6 +243,14 @@ ul.notes { color:var(--muted); font-size:14px; padding-left:18px; line-height:1.
 .loc-map { aspect-ratio:1 / 1; width:100%; }
 .loc-map #loc { height:100%; }
 .loc-empty { display:flex; align-items:center; justify-content:center; border:1px solid var(--line); background:var(--soft); }
+.stat-cards { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:16px; }
+.tile.stat { padding:12px 16px; min-width:0; }
+.tile.stat h2.k { margin:0; }
+.tile.stat .v { font-size:22px; margin-top:4px; }
+.stat-sub { color:var(--muted); font-size:13px; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.stat-rows { display:grid; grid-template-columns:auto auto; justify-content:space-between; gap:2px 12px; margin:6px 0 0; font-size:14px; }
+.stat-rows dt { color:var(--muted); }
+.stat-rows dd { margin:0; text-align:right; font-weight:700; color:var(--ink); font-variant-numeric:tabular-nums; }
 @media (min-width: 1100px) and (min-height: 700px) {
   body.fit { --topbar-h:61px; --top-h:clamp(320px, 46vh, 540px); }
   .complex-top { position:sticky; top:var(--topbar-h); z-index:5; background:var(--bg);
@@ -253,8 +261,7 @@ ul.notes { color:var(--muted); font-size:14px; padding-left:18px; line-height:1.
   .loc-card .card-title { margin-bottom:4px; }
   .loc-map { width:var(--side); height:var(--side); flex:none; }
   .loc-card .table-foot { width:var(--side); margin:6px 0 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .complex-charts { grid-template-rows:minmax(0, 3fr) minmax(0, 2fr); min-height:0; }
-  .complex-charts .grid-2 { min-height:0; }
+  .complex-charts { grid-template-rows:minmax(0, 1fr) auto; min-height:0; }
   .chart-card { display:flex; flex-direction:column; min-height:0; padding:14px 18px; }
   .chart-card .card-title { font-size:15px; margin:0 0 2px; }
   .chart-card .chart, .chart-card .chart.small { flex:1; min-height:0; height:auto; }

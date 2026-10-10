@@ -1,4 +1,4 @@
-// 단지 상세: 계약일 x 가격 산점도(면적 구간 3색), 면적 구간별·층별 거래 수
+// 단지 상세: 계약일 x 가격 산점도(면적 구간 3색), 요약 카드(면적 구간별 거래 수·최고가·최저가)
 (async () => {
   const el = (id) => document.getElementById(id);
   const BANDS = [['le60', '60㎡ 이하', (a) => a <= 60], ['60_85', '60~85㎡', (a) => a > 60 && a <= 85], ['gt85', '85㎡ 초과', (a) => a > 85]];
@@ -25,18 +25,19 @@
     })),
   });
 
-  const bar = (node, labels, counts, unit) => {
-    const c = App.chart(node);
-    c.setOption({
-      ...base, legend: { show: false }, grid: { left: 48, right: 12, top: 16, bottom: 28 },
-      xAxis: { ...base.xAxis, data: labels },
-      tooltip: { ...base.tooltip, valueFormatter: (v) => `${App.fmt.int(v)}${unit}` },
-      series: [{ name: '거래 수', type: 'bar', data: counts, color: App.seriesColor(0), barMaxWidth: 28 }],
-    });
-  };
-  bar(el('areas'), BANDS.map((b) => b[1]), BANDS.map(([, , test]) => trades.filter((t) => t.area != null && test(t.area)).length), '건');
-  const FLOORS = [['지하', (f) => f < 1], ['1~5', (f) => f >= 1 && f <= 5], ['6~10', (f) => f >= 6 && f <= 10], ['11~15', (f) => f >= 11 && f <= 15], ['16~20', (f) => f >= 16 && f <= 20], ['21+', (f) => f >= 21]];
-  bar(el('floors'), FLOORS.map((f) => f[0]), FLOORS.map(([, test]) => trades.filter((t) => t.floor != null && test(t.floor)).length), '건');
+  // 요약 카드: 면적 구간별 거래 수, 최고가·최저가(같은 값이면 최근 거래)
+  el('stat-areas').innerHTML = BANDS.map(([, label, test]) =>
+    `<dt>${label}</dt><dd>${App.fmt.int(trades.filter((t) => t.area != null && test(t.area)).length)}건</dd>`).join('');
+  const detail = (t) => `${t.deal_date} · 전용 ${t.area ?? '-'}㎡ · ${t.floor ?? '-'}층`;
+  if (trades.length) {
+    const byRecent = [...trades].sort((a, b) => b.deal_date.localeCompare(a.deal_date));
+    const max = byRecent.reduce((m, t) => (t.deal_amount > m.deal_amount ? t : m));
+    const min = byRecent.reduce((m, t) => (t.deal_amount < m.deal_amount ? t : m));
+    el('stat-max').textContent = App.fmt.eok(max.deal_amount);
+    el('stat-max-d').textContent = detail(max);
+    el('stat-min').textContent = App.fmt.eok(min.deal_amount);
+    el('stat-min-d').textContent = detail(min);
+  }
 
   // 위치: 배경지도 위에 그 읍면동 경계, 주변 단지(회색)와 이 단지(강조)
   if (el('loc')) {

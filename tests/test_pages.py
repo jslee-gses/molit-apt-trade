@@ -127,7 +127,8 @@ def test_complex_page(client, seeded):
     # 왼쪽 지도 + 오른쪽 그래프(위쪽 고정), 아래 최근 거래
     assert '<body class="fit">' in html and 'class="complex-top"' in html and 'class="card trades-card"' in html
     top = html.split('class="complex-top"')[1].split('class="card trades-card"')[0]
-    assert 'id="loc"' in top and 'id="scatter"' in top and 'id="areas"' in top and 'id="floors"' in top
+    assert 'id="loc"' in top and 'id="scatter"' in top and 'id="stat-areas"' in top
+    assert 'id="stat-max"' in top and 'id="stat-min"' in top and 'id="areas"' not in html and 'id="floors"' not in html
     assert "126.955" not in html and "37.575" not in html          # 좌표 숫자를 화면에 쓰지 않는다
     c = client.get("/complexes/C").get_data(as_text=True)
     assert 'id="loc"' not in c and "위치 정보 없음" in c and "지역 판정: 미판정" in c

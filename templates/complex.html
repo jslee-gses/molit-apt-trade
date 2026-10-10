@@ -28,7 +28,7 @@
   {% if c.sgg_mismatch %}<span class="badge warn">신고 시군구와 좌표 시군구가 다름</span>{% endif %}
 </div>
 <p id="msg" class="meta"></p>
-{# 넓은 화면: 왼쪽 정사각형 지도 + 오른쪽 그래프(가격 / 면적·층)를 고정하고, 아래 최근 거래 목록만 스크롤 #}
+{# 넓은 화면: 왼쪽 정사각형 지도 + 오른쪽 가격 그래프·요약 카드를 고정하고, 아래 최근 거래 목록만 스크롤 #}
 <div class="complex-top">
   <section class="card loc-card">
     <h2 class="card-title">위치</h2>
@@ -41,9 +41,11 @@
   </section>
   <div class="complex-charts">
     <section class="card chart-card"><h2 class="card-title">거래 가격 (해제 제외)</h2><div id="scatter" class="chart"></div></section>
-    <div class="grid-2">
-      <section class="card chart-card"><h2 class="card-title">면적 구간별 거래 수</h2><div id="areas" class="chart small"></div></section>
-      <section class="card chart-card"><h2 class="card-title">층별 거래 수</h2><div id="floors" class="chart small"></div></section>
+    {# 해제 거래 제외, 전 기간. 값은 complex.js가 채운다 #}
+    <div class="stat-cards">
+      <section class="tile stat"><h2 class="k">면적 구간별 거래 수</h2><dl id="stat-areas" class="stat-rows"></dl></section>
+      <section class="tile stat"><h2 class="k">최고가</h2><div class="v" id="stat-max">-</div><div class="stat-sub" id="stat-max-d"></div></section>
+      <section class="tile stat"><h2 class="k">최저가</h2><div class="v" id="stat-min">-</div><div class="stat-sub" id="stat-min-d"></div></section>
     </div>
   </div>
 </div>
