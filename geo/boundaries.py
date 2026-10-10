@@ -145,6 +145,35 @@ def load_sgg(path, src_crs=None, encoding=None):
     return out.dissolve(by="sgg_cd").reset_index()
 
 
+def load_admdong_sgg(path):
+    """vuski/admdongkor 행정동 경계(통계청 SGIS 가공, CC BY 4.0) → 시군구 경계(EPSG:5179).
+    adm_cd2(행정기관코드 10자리) 앞 5자리 = 시군구 코드. 행정동끼리 경계가 맞물려 있어 합치면 깔끔한 시군구가 된다.
+    → (sgg_cd, geometry)"""
+    gdf = gpd.read_file(path)
+    if gdf.crs is None:
+        gdf = gdf.set_crs("EPSG:4326")
+    code = gdf["adm_cd2"].astype(str).str.strip().str[:5]
+    out = gpd.GeoDataFrame({"sgg_cd": code}, geometry=gdf.geometry.make_valid(), crs=gdf.crs).to_crs(METRIC_CRS)
+    out = out.dissolve(by="sgg_cd").reset_index()
+    out["geometry"] = gpd.GeoSeries([_polygonal(g) for g in out.geometry], index=out.index, crs=out.crs)
+    return out
+
+
+def use_admdong(sgg_web, admdong):
+    """화면용 시군구 경계를 행정동 합(load_admdong_sgg)으로 바꾼다. 없는 코드는 그대로. → (sgg_web, 못 바꾼 코드)"""
+    geo = admdong.set_index("sgg_cd").geometry
+    rows, missing = [], []
+    for code, g in zip(sgg_web["region_cd"], sgg_web.geometry):
+        if code in geo.index and geo[code] is not None:
+            rows.append(geo[code])
+        else:
+            rows.append(g)
+            missing.append(code)
+    out = sgg_web.copy()
+    out["geometry"] = gpd.GeoSeries(rows, index=out.index, crs=sgg_web.crs)
+    return out, missing
+
+
 def choose_sgg(dissolved, original):
     """시군구 경계: 원본(국토지리정보원)이 있고 읍면동 합과 면적이 맞으면 원본, 아니면(2026 개편 등) 읍면동 합.
     → (GeoDataFrame region_cd·geometry, 읍면동 합으로 대신한 코드 목록)"""
@@ -208,9 +237,10 @@ def _write_geojson(gdf, path, props, gz=False):
         path.write_text(text, encoding="utf-8")
 
 
-def build(emd, codes_df, version, source, static_dir=None, data_dir=None, sgg_original=None):
+def build(emd, codes_df, version, source, static_dir=None, data_dir=None, sgg_original=None, admdong=None):
     """emd: normalize_codes를 거친 읍면동(EPSG:5179, 열 emd_cd·name·geometry).
-    sgg_original: load_sgg 결과(없으면 시군구를 읍면동 합으로 만든다)."""
+    sgg_original: load_sgg 결과(없으면 시군구를 읍면동 합으로 만든다).
+    admdong: load_admdong_sgg 결과. 있으면 시도·시군구 화면 경계는 이것으로 그린다(sgg_original보다 우선)."""
     static_dir = Path(static_dir or STATIC_GEO) / version
     data_dir = Path(data_dir or GEO_DATA) / version
     sgg_names = dict(zip(codes_df["LAWD_CD"], codes_df["시군구"]))
@@ -233,9 +263,15 @@ def build(emd, codes_df, version, source, static_dir=None, data_dir=None, sgg_or
     sido["full_name"] = sido["name"]
 
     # 화면용: 시도 단계는 시군구 원본 경계를 시도 코드로 칠한다(시도 원본은 변경금지 라이선스라 쓰지 않는다)
-    sgg_web, fallback = choose_sgg(sgg, sgg_original)
-    if sgg_original is not None and fallback:
-        print(f"시군구 원본 대신 읍면동 합을 쓴 곳 {len(fallback)}개(2026 개편 등): {', '.join(fallback)}")
+    if admdong is not None:
+        # 시도·시군구 화면은 통계청 행정동 경계를 합친 것(접경지역까지 덮고 2026 개편 반영). 읍면동(법정동)·판정은 그대로
+        sgg_web, missing = use_admdong(sgg, admdong)
+        if missing:
+            print(f"행정동 경계에 없어 읍면동 합을 쓴 시군구 {len(missing)}개: {', '.join(missing)}")
+    else:
+        sgg_web, fallback = choose_sgg(sgg, sgg_original)
+        if sgg_original is not None and fallback:
+            print(f"시군구 원본 대신 읍면동 합을 쓴 곳 {len(fallback)}개(2026 개편 등): {', '.join(fallback)}")
     # 전국(시도 단계) 화면: 시군구 경계를 시도마다 하나로 합친 시도 경계와 이름표 자리(cp, 시도 안 가장 깊은 곳)
     sido_web = sgg_web[["sido_cd", "geometry"]].dissolve(by="sido_cd").reset_index()
     sido_web["geometry"] = gpd.GeoSeries([_polygonal(g) for g in sido_web.geometry], index=sido_web.index,
@@ -276,6 +312,7 @@ def main(argv=None):
     parser.add_argument("--src-crs", help="경계 파일에 .prj가 없을 때 좌표계")
     parser.add_argument("--encoding", help="속성 인코딩(기본: 자동). 한글이 깨지면 cp949 지정")
     parser.add_argument("--source", default="", help="출처 메모(meta.json에 기록)")
+    parser.add_argument("--admdong", help="vuski/admdongkor 행정동 경계 geojson(CC BY 4.0): 시도·시군구 화면 경계를 이것으로")
     parser.add_argument("--fill-parcels", help="연속지적도 AL_D002_*.zip 폴더: 읍면동 경계에 빠진 읍면동을 필지로 채운다(geo/parcel_fill.py)")
     args = parser.parse_args(argv)
 
@@ -306,7 +343,9 @@ def main(argv=None):
             emd = pd.concat([emd, filled], ignore_index=True)
             emd = gpd.GeoDataFrame(emd, geometry="geometry", crs=filled.crs)
     sgg_original = load_sgg(args.sgg_shp, args.src_crs, args.encoding) if args.sgg_shp else None
-    regions = build(emd, codes_df, args.version, args.source or str(args.shp), sgg_original=sgg_original)
+    admdong = load_admdong_sgg(args.admdong) if args.admdong else None
+    regions = build(emd, codes_df, args.version, args.source or str(args.shp), sgg_original=sgg_original,
+                    admdong=admdong)
     print(f"경계 {args.version}: " + ", ".join(f"{k} {v}개" for k, v in regions["level"].value_counts().items()))
     for base in (STATIC_GEO, GEO_DATA):
         for f in sorted((base / args.version).glob("*")):
