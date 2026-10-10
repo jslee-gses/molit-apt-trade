@@ -179,9 +179,6 @@ a.rank-item { grid-template-columns:48px minmax(0,1fr) auto; }
 .rank-card { display:flex; flex-direction:column; gap:12px; max-height:584px; }
 .rank-card > input { flex:0 0 auto; }
 .rank-card .rank-list { overflow-y:auto; min-height:0; flex:1 1 auto; }
-.page-crumbs { display:flex; flex-wrap:wrap; gap:6px; align-items:center; color:var(--muted); font-size:14px; margin:0 0 10px; }
-.page-crumbs a { font-weight:600; }
-.page-crumbs b { color:var(--ink); }
 .legend-bar { display:flex; flex-direction:column; gap:4px; }
 .ramp { display:flex; height:8px; overflow:hidden; }
 .ramp i { flex:1; }
@@ -231,4 +228,57 @@ ul.notes { color:var(--muted); font-size:14px; padding-left:18px; line-height:1.
   .topbar { position:static; }
   .topbar-in { gap:8px; }
   .topbar nav a { padding:10px 8px; }
+}
+
+/* 단지 상세: 왼쪽 정사각형 지도 + 오른쪽 가격 그래프와 요약 카드(면적 구간·최고가·최저가), 아래 최근 거래.
+   넓고 충분히 높은 화면에서는 페이지를 화면 높이에 맞춰 위쪽을 모두 고정하고 거래 목록 상자 안만 스크롤한다
+   (표 머리글도 고정). 좁거나 낮은 화면은 위에서 아래로 차례로 쌓는다. */
+.complex-top { display:grid; grid-template-columns:minmax(0, 1fr); gap:16px; margin-bottom:16px; }
+.complex-top .card, .complex-charts .card { margin-bottom:0; }
+.complex-charts { display:grid; gap:16px; min-width:0; }
+.loc-card { display:flex; flex-direction:column; }
+.loc-head { display:flex; align-items:baseline; gap:14px; min-width:0; margin-bottom:8px; }
+.loc-head .card-title { margin:0; flex:none; }
+.loc-crumbs { min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:14px; color:var(--muted); }
+.loc-crumbs > * { margin-right:4px; }
+.loc-crumbs a { font-weight:600; }
+.loc-crumbs b { color:var(--ink); font-weight:800; }
+.loc-map { aspect-ratio:1 / 1; width:100%; }
+.loc-map #loc { height:100%; }
+.loc-empty { display:flex; align-items:center; justify-content:center; border:1px solid var(--line); background:var(--soft); }
+.complex-badges { margin-bottom:16px; }
+.trades-card .card-title small { font-size:13px; font-weight:400; margin-left:8px; }
+.stat-cards { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:16px; }
+.tile.stat { padding:12px 16px; min-width:0; }
+.tile.stat h2.k { margin:0; }
+.tile.stat .v { font-size:22px; margin-top:4px; }
+.stat-sub { color:var(--muted); font-size:13px; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.stat-rows { display:grid; grid-template-columns:auto auto; justify-content:space-between; gap:2px 12px; margin:6px 0 0; font-size:14px; }
+.stat-rows dt { color:var(--muted); }
+.stat-rows dd { margin:0; text-align:right; font-weight:700; color:var(--ink); font-variant-numeric:tabular-nums; }
+@media (min-width: 1100px) and (min-height: 700px) {
+  /* 페이지는 스크롤하지 않는다: 화면 높이에 맞춰 제목·지도·그래프·카드는 고정, 최근 거래 목록 상자 안만 스크롤.
+     위쪽 높이는 목록이 250px 안팎 남도록 화면 높이에서 뺀다(제목 부분·여백 약 560px). */
+  body.fit { --top-h:clamp(280px, calc(100vh - 560px), 560px); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+  body.fit main { flex:1; min-height:0; width:100%; display:flex; flex-direction:column; padding:16px 16px 8px; }
+  body.fit .site-foot { margin-top:6px; flex:none; font-size:12px; line-height:1.4; }
+  body.fit .page-head h1 { font-size:26px; }
+  body.fit .page-head p { margin-top:2px; }
+  body.fit .status-line { margin:2px 0 10px; }
+  body.fit .complex-badges { margin-bottom:10px; }
+  body.fit .complex-top { margin-bottom:12px; }
+  body.fit .page-head, body.fit .status-line, body.fit .toolbar { flex:none; }
+  .complex-top { height:var(--top-h); flex:none; grid-template-columns:auto minmax(0, 1fr); }
+  /* 정사각형: 한 변 = 위쪽 높이 - (카드 위아래 여백 28 + 제목 줄 32). 카드 너비는 지도에 맞추고 긴 경로는 말줄임 */
+  .loc-card { --side:calc(var(--top-h) - 60px); width:calc(var(--side) + 36px); height:100%; padding:14px 18px; overflow:hidden; }
+  .loc-head { margin-bottom:6px; }
+  .loc-map { width:var(--side); height:var(--side); flex:none; }
+  .complex-charts { grid-template-rows:minmax(0, 1fr) auto; min-height:0; }
+  .chart-card { display:flex; flex-direction:column; min-height:0; padding:14px 18px; }
+  .chart-card .card-title { font-size:15px; margin:0 0 2px; }
+  .chart-card .chart { flex:1; min-height:0; height:auto; }
+  .trades-card { flex:1; min-height:0; display:flex; flex-direction:column; margin-bottom:0; padding:12px 18px 6px; }
+  .trades-card .table-wrap { flex:1; min-height:0; overflow:auto; }
+  .trades-card .data-table thead th { position:sticky; top:0; z-index:1; }
+  .trades-card .table-foot { flex:none; }
 }

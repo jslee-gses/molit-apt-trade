@@ -2,9 +2,9 @@
 {% import "_ui.html" as ui %}
 {% block title %}{{ c.apt_nm }} · 아파트 실거래가{% endblock %}
 {% set has_loc = c.lon is not none and c.geocode_status in ('ok', 'manual') %}
-{# 상위 행정구역으로 돌아가기: 단지 검색 화면을 그 지역 선택 상태로 연다. 위치 지도가 있으면 지도 상자 안 왼쪽 위에 #}
+{# 상위 행정구역으로 돌아가기: 단지 검색 화면을 그 지역 선택 상태로 연다. '위치' 제목 옆에 #}
 {% macro crumbs_nav(cls) %}
-<nav class="{{ cls }}" aria-label="행정구역 경로">
+<nav class="{{ cls }}" aria-label="행정구역 경로" title="{% for r in crumbs %}{{ r.name }} › {% endfor %}{{ c.apt_nm or c.apt_seq }}">
   <a href="/complexes">단지</a>
   {% set ns = namespace(q=[]) %}
   {% for r in crumbs %}{% set ns.q = ns.q + [r.level ~ '=' ~ r.region_cd] %}
@@ -14,10 +14,10 @@
 </nav>
 {% endmacro %}
 {% block page_head %}
-{% if not has_loc %}{{ crumbs_nav('page-crumbs') }}{% endif %}
 {{ ui.page_head(c.apt_nm, c.region_name or '지역 미판정') }}{% endblock %}
+{% block body_class %}fit{% endblock %}
 {% block body %}
-<div class="toolbar" style="margin-bottom:16px">
+<div class="toolbar complex-badges">
   <span class="badge">신고 법정동 {{ c.api_umd_nm or '-' }}</span>
   <span class="badge">지번 {{ c.jibun or '-' }}{% if c.road_nm %} · {{ c.road_nm }}{% endif %}</span>
   <span class="badge">건축 {{ c.build_year or '-' }}년</span>
@@ -27,22 +27,28 @@
   {% if c.sgg_mismatch %}<span class="badge warn">신고 시군구와 좌표 시군구가 다름</span>{% endif %}
 </div>
 <p id="msg" class="meta"></p>
-<section class="card">
-  <h2 class="card-title">위치</h2>
-  {% if has_loc %}
-  <div class="map-wrap">{{ crumbs_nav('map-crumbs') }}<div id="loc" class="basemap small"></div></div>
-  <p class="table-foot">같은 읍면동 단지(회색)와 이 단지(강조). 점을 누르면 그 단지로 갑니다. 단지 위치는 필지 대표점입니다.</p>
-  {% else %}
-  <p class="meta">위치 정보 없음(좌표 미확보)</p>
-  {% endif %}
-</section>
-<section class="card"><h2 class="card-title">거래 가격 (해제 제외)</h2><div id="scatter" class="chart"></div></section>
-<div class="grid-2">
-  <section class="card"><h2 class="card-title">면적 구간별 거래 수</h2><div id="areas" class="chart small"></div></section>
-  <section class="card"><h2 class="card-title">층별 거래 수</h2><div id="floors" class="chart small"></div></section>
+{# 넓은 화면: 왼쪽 정사각형 지도 + 오른쪽 가격 그래프·요약 카드를 고정하고, 아래 최근 거래 목록만 스크롤 #}
+<div class="complex-top">
+  <section class="card loc-card">
+    <div class="loc-head"><h2 class="card-title">위치</h2>{{ crumbs_nav('loc-crumbs') }}</div>
+    {% if has_loc %}
+    <div class="loc-map"><div id="loc" class="basemap"></div></div>
+    {% else %}
+    <div class="loc-map loc-empty"><p class="meta">위치 정보 없음(좌표 미확보)</p></div>
+    {% endif %}
+  </section>
+  <div class="complex-charts">
+    <section class="card chart-card"><h2 class="card-title">거래 가격 (해제 제외)</h2><div id="scatter" class="chart"></div></section>
+    {# 해제 거래 제외, 전 기간. 값은 complex.js가 채운다 #}
+    <div class="stat-cards">
+      <section class="tile stat"><h2 class="k">면적 구간별 거래 수</h2><dl id="stat-areas" class="stat-rows"></dl></section>
+      <section class="tile stat"><h2 class="k">최고가</h2><div class="v" id="stat-max">-</div><div class="stat-sub" id="stat-max-d"></div></section>
+      <section class="tile stat"><h2 class="k">최저가</h2><div class="v" id="stat-min">-</div><div class="stat-sub" id="stat-min-d"></div></section>
+    </div>
+  </div>
 </div>
-<section class="card">
-  <h2 class="card-title">최근 거래 {{ trades|length }}건</h2>
+<section class="card trades-card">
+  <h2 class="card-title">최근 거래 {{ trades|length }}건 <small class="muted">해제 거래는 취소선</small></h2>
   <div class="table-wrap"><table class="data-table">
     <thead><tr><th scope="col">계약일</th><th scope="col" class="num">거래금액(만원)</th><th scope="col" class="num">전용(㎡)</th><th scope="col" class="num">㎡당(만원)</th><th scope="col" class="num">층</th><th scope="col">동</th><th scope="col">거래유형</th></tr></thead>
     <tbody>
@@ -53,7 +59,6 @@
     {% endfor %}
     </tbody>
   </table></div>
-  <p class="table-foot">해제 거래는 취소선으로 표시합니다.</p>
 </section>
 {% endblock %}
 {% block scripts %}{% include "_basemap.html" %}{% include "_charts.html" %}<script>window.APT_SEQ = {{ c.apt_seq|tojson }};</script>
